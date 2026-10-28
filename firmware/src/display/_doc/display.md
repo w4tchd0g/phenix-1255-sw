@@ -1,8 +1,9 @@
 # Front panel display
 
-`display_ui.c` (pages, menu, input) and `display_fb.c` (frame buffer, font)
-run the front panel. A 0.96" 128x64 OLED (SSD1306, I2C) shows the device
-state on five status pages and offers a settings menu. It is operated with a
+`display_ui.c` (pages, menu, input) and `display_fb.c` (frame buffer, font,
+bitmaps) run the front panel; `splash_logo.c` holds the logo of the start
+screen. A 0.96" 128x64 OLED (SSD1306, I2C) shows the device
+state on six status pages and offers a settings menu. It is operated with a
 rotary encoder with push button; both are part of phenix-1255-hw. SW3 on the
 FRDM-MCXN947 also steps through the pages, which is useful on a µCell or
 compatible board setup without encoder. The firmware runs unchanged without a
@@ -41,7 +42,7 @@ detent (`steps-per-period = <4>`). If turning clockwise moves backwards, add
 ```
  +--------------------------+
  | PHENIX-1255        [ETH] |  yellow: host link, highlighted while a host session is open
- | STATUS 1/5 [ERR][RX][TX] |  yellow: page or menu title, active stream, error
+ | STATUS 1/6 [ERR][RX][TX] |  yellow: page or menu title, active stream, error
  +--------------------------+
  | RX 438.250000 MHz        |
  | TX 430.650000 MHz        |  blue: six lines of content
@@ -53,6 +54,28 @@ detent (`steps-per-period = <4>`). If turning clockwise moves backwards, add
 watchdog reset, initialization error) or the SX1255 is not ready. `RX` is
 shown while the sample stream runs, `TX` while TX is enabled.
 
+### Start screen
+
+For the first 3 s after boot the display shows the project logo: the
+"Phenix-1255" lettering in the yellow zone, the phoenix (44x48 pixels) in
+the blue zone and next to it the firmware version. The start-up of the
+firmware does not wait for it; the status pages follow afterwards.
+
+```
+ +--------------------------+
+ |       Phenix-1255        |  yellow: logo lettering
+ +--------------------------+
+ | (phoenix)  SX1255 SDR    |
+ |            FW 0.1.0-dev  |  blue: logo and firmware version
+ |            Starting ...  |
+ +--------------------------+
+```
+
+The logo bitmaps in `splash_logo.c` are generated from
+`_doc/images/phenix-1255_logo_transparent.png` with
+[logo_to_c.py](../../../../tools/_doc/logo_to_c.md); the file is not edited
+by hand.
+
 ### Status pages
 
 | Page | Content |
@@ -62,6 +85,10 @@ shown while the sample stream runs, `TX` while TX is enabled.
 | RF | LNA, PGA, DAC and mixer gain, RX input, TX driver, PA, SX1255 state |
 | STREAM | Sample counter, RX/TX packet counters, late/early TX packets, SAI FIFO and frame sync errors |
 | SYSTEM | Firmware and Zephyr version, uptime, last reset cause, serial number |
+| HARDWARE | Hardware variant and HW_ID jumpers ([board.md](../../board/_doc/board.md#hardware-variant)), host link selected by `COMM_SEL` |
+
+On unsupported hardware the front panel shows only a static HARDWARE ERROR
+screen ([board.md](../../board/_doc/board.md#hardware-variant)).
 
 The pages change every 5 s ("Auto pages"). A manual page change pauses the
 automatic change for 60 s.
@@ -119,8 +146,8 @@ switched and when an error is signalled.
   web interface and above the watchdog feeder. It redraws every 250 ms and
   sends a frame only when its content changed; a full frame takes about
   23 ms on the bus.
-- `display_fb.c` holds the frame buffer in the SSD1306 page layout and a
-  5x7 font. Frame buffers and the thread stack are in SRAMX (CPU only, the
+- `display_fb.c` holds the frame buffer in the SSD1306 page layout, a
+  5x7 font and the bitmap drawing used by the start screen. Frame buffers and the thread stack are in SRAMX (CPU only, the
   LPI2C driver does not use DMA).
 - The LPI2C3 and GPIO port 0/1 interrupts run at priority 3, below the eDMA
   (0) and SAI (2) interrupts, so the front panel cannot delay the sample

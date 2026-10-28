@@ -22,6 +22,7 @@ Zephyr firmware streams timestamped I/Q samples over HS USB or Ethernet
 | `common/include/phenix1255/protocol.h` | Wire protocol shared by firmware and host |
 | `soapy/` | SoapySDR module, test programs in `soapy/tests/` (C++17, libusb optional) |
 | `tools/phx_client.py` | Protocol test client, Ethernet only (Python stdlib only) |
+| `tools/logo_to_c.py` | Generates `firmware/src/display/splash_logo.c` from the logo PNG (needs Pillow, not needed for the build) |
 | `patches/` | Patches for TETRA-Bluestation and FlowStation (`git apply` format) |
 | `_doc/` | System documents: architecture, hardware, building, testing, roadmap |
 

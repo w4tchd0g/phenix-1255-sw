@@ -28,7 +28,8 @@ dummy load on the TX output and on the PA output.
 
 | Step | Procedure | Expected |
 |---|---|---|
-| Boot | Power on, watch the console | No errors in the boot log; `phenix status` shows `pa: disabled` and `comm_sel` matching the switch |
+| Boot | Power on, watch the console | No errors in the boot log; `phenix status` shows `hardware: base (HW_ID2..0 = 000)`, `pa: disabled` and `comm_sel` matching the switch |
+| Unsupported hardware | Close one HW_ID jumper (or connect P3_5 to +3V3), reset; open it again afterwards | Console repeats `Unsupported hardware: HW_ID2..0 = 001` every 5 s, red FRDM LED blinks fast, no LED of phenix-1255-hw lit, display shows `HARDWARE ERROR` and `HW ID 1 (001)`, no network or USB device; `phenix status` shows `start-up: halted`, `sx1255` commands are refused |
 | SX1255 | `sx1255 info` | Version read back, reference 38400000 Hz, RX and TX PLL locked |
 | PA off at idle | Measure P2_4 and the PA supply (VBAT3 after the MOSFET) after boot | P2_4 high, PA supply off |
 | PA off in reset | Hold the reset button; halt the MCU with the debugger | PA supply stays off (gate pull-up) |
@@ -99,7 +100,7 @@ Expected results:
 | Test | Procedure | Expected |
 |---|---|---|
 | Colour zones | `phenix display test 30` | Lit bar exactly in the yellow zone, frame exactly in the blue zone, text not mirrored |
-| Pages | `phenix display key next` five times, `phenix display dump` after each | All five pages, values match `stream status` / `phenix config show` |
+| Pages | `phenix display key next` six times, `phenix display dump` after each | All six pages, values match `stream status` / `phenix config show` |
 | Host state | Run `phx_soapy_test rx` | Link label highlighted, `RX` shown, counters running, test `PASS` |
 | Menu | Navigate with `phenix display key ...` or the encoder | See [display.md](../firmware/src/display/_doc/display.md#operation); leaving the Network menu discards changes |
 | Dimming | Set *Dim after* to 1 min, wait | `phenix display` reports `(dimmed)`; the first input only wakes the display |

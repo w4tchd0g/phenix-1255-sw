@@ -31,6 +31,12 @@ struct display_ui_info {
 /** Start the display thread. Without a display the firmware runs as before. */
 int display_ui_start(void);
 
+/**
+ * Show the unsupported hardware error as a static image, without starting
+ * the display thread. Does nothing without a display.
+ */
+void display_ui_show_hw_error(void);
+
 /** Inject an operator input (console test without the encoder). */
 void display_ui_inject(enum display_ui_key key);
 

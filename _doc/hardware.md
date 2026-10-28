@@ -3,8 +3,8 @@
 ## Overview
 
 The phenix-1255-hw board carries a Semtech SX1255 transceiver with a
-38.4 MHz reference oscillator, three status LEDs, the `COMM_SEL` switch, a
-P-MOSFET with gate pull-up that switches the PA supply (VBAT3), the front
+38.4 MHz reference oscillator, three status LEDs, the `COMM_SEL` switch,
+three HW_ID solder jumpers for the hardware variant, a P-MOSFET with gate pull-up that switches the PA supply (VBAT3), the front
 panel OLED display and a rotary encoder with push button
 ([display.md](../firmware/src/display/_doc/display.md)). It is connected
 to an NXP FRDM-MCXN947. A µCell board or another SX1255 board built the same
@@ -43,6 +43,10 @@ repository [Phenix-1255-HW](https://github.com/labdvm/Phenix-1255-HW).
 | LED2 (green, OK) | P0_15 | GPIO output, active high | |
 | COMM_SEL | P2_7 | GPIO input, internal pull-up | High (open) = HS USB, low = Ethernet |
 | FACTORY_RST (SW2) | P0_23 | GPIO input, pull-up, active low | Held during boot = factory reset |
+| HW_ID0 | P3_5 | GPIO input, internal pull-down | Solder jumper to +3V3, bit 0 of the hardware ID |
+| HW_ID1 | P3_4 | GPIO input, internal pull-down | Solder jumper to +3V3, bit 1 of the hardware ID |
+| HW_ID2 | P4_4 | GPIO input, internal pull-down | Solder jumper to +3V3, bit 2 of the hardware ID |
+| FRDM red LED | P0_10 | GPIO output, active low | On the FRDM-MCXN947; blinks fast on unsupported hardware |
 | OLED SDA | P1_0 | LPI2C3 SDA (FC3_P0) | Front panel display, see [display.md](../firmware/src/display/_doc/display.md) |
 | OLED SCL | P1_1 | LPI2C3 SCL (FC3_P1) | |
 | Encoder A | P1_19 | GPIO input, internal pull-up | |
@@ -55,8 +59,8 @@ The devicetree description is in
 
 ## Board functions
 
-PA enable, status LEDs, the `COMM_SEL` switch, the factory reset button and
-the watchdog: [board.md](../firmware/src/board/_doc/board.md). Front panel
+PA enable, status LEDs, the `COMM_SEL` switch, the factory reset button, the
+hardware variant (HW_ID jumpers) and the watchdog: [board.md](../firmware/src/board/_doc/board.md). Front panel
 display and encoder: [display.md](../firmware/src/display/_doc/display.md).
 Memory layout: [firmware.md](../firmware/_doc/firmware.md#memory).
 
@@ -86,6 +90,8 @@ Compared to phenix-1255-hw the feature set of such a setup is reduced:
 - Indicator LEDs on the SX1255 board (e.g. the µCell RX/TX LEDs) are not
   driven.
 - `COMM_SEL` is set with a wire bridge from P2_7 to GND.
+- The HW_ID pins stay unconnected; the internal pull-downs make them read
+  as the base variant ([board.md](../firmware/src/board/_doc/board.md#hardware-variant)).
 
 At 600 kHz sample rate the I2S bit clock is 38.4 MHz. Signal integrity over
 jumper wires is a known limitation of this setup.

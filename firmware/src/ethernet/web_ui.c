@@ -18,6 +18,7 @@
 #include <zephyr/app_version.h>
 
 #include "board/board_io.h"
+#include "board/hw_id.h"
 #include "board/watchdog.h"
 #include "config/config_store.h"
 #include "control/control.h"
@@ -115,6 +116,7 @@ static void render_status(void)
 	char addr[NET_IPV4_ADDR_LEN];
 	char mac[18];
 	char serial[33];
+	char bits[HW_ID_BITS + 1];
 
 	stream_get_stats(&st);
 	net_config_get_address(addr, sizeof(addr));
@@ -124,6 +126,8 @@ static void render_status(void)
 	out("<h2>Status</h2><table>");
 	out("<tr><td>Firmware</td><td>%s</td></tr>", APP_VERSION_EXTENDED_STRING);
 	out("<tr><td>Serial</td><td>%s</td></tr>", serial);
+	hw_id_bits_str(bits, sizeof(bits));
+	out("<tr><td>Hardware</td><td>%s (HW_ID %s)</td></tr>", hw_id_name(), bits);
 	out("<tr><td>Host link</td><td>%s</td></tr>", board_comm_mode_str(board_io_comm_mode()));
 	out("<tr><td>Host session</td><td>%s</td></tr>",
 	    control_session_active() ? "connected" : "none");
@@ -190,12 +194,13 @@ static void render_json(void)
 	serial_string(serial, sizeof(serial));
 
 	page_len = 0;
-	out("{\"firmware\":\"%s\",\"serial\":\"%s\",\"host_link\":\"%s\","
+	out("{\"firmware\":\"%s\",\"serial\":\"%s\",\"hardware\":\"%s\",\"hw_id\":%d,"
+	    "\"host_link\":\"%s\","
 	    "\"session\":%s,\"address\":\"%s\",\"address_mode\":\"%s\","
 	    "\"sx1255_ready\":%s,\"streaming\":%s,\"tx_enabled\":%s,\"pa\":%s,"
 	    "\"sample_rate\":%u,\"counter\":%llu,\"tx_late\":%u,\"tx_early\":%u,"
 	    "\"fifo_errors\":%u,\"last_reset\":\"%s\"}\n",
-	    APP_VERSION_EXTENDED_STRING, serial,
+	    APP_VERSION_EXTENDED_STRING, serial, hw_id_name(), hw_id_get(),
 	    (board_io_comm_mode() == BOARD_COMM_USB) ? "usb" : "ethernet",
 	    control_session_active() ? "true" : "false", addr, net_config_get_mode(),
 	    sx1255_is_ready() ? "true" : "false", st.running ? "true" : "false",

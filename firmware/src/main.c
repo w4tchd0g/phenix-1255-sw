@@ -9,6 +9,7 @@
 #include <zephyr/app_version.h>
 
 #include "board/board_io.h"
+#include "board/hw_id.h"
 #include "board/watchdog.h"
 #include "config/config_store.h"
 #include "control/control.h"
@@ -34,6 +35,16 @@ int main(void)
 
 	LOG_INF("Phenix-1255 firmware %s (Zephyr %s)", APP_VERSION_EXTENDED_STRING,
 		KERNEL_VERSION_STRING);
+
+	/*
+	 * Before any other pin is driven: on unknown hardware only the early
+	 * PA_EN shutdown and the error screen on the display (whose driver is
+	 * already initialized) touch the board.
+	 */
+	if (hw_id_init() < 0) {
+		display_ui_show_hw_error();
+		hw_id_halt();
+	}
 
 	ret = board_io_init();
 	if (ret < 0) {

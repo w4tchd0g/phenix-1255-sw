@@ -22,14 +22,14 @@ firmware/
 
 | Module | Files | Purpose | Documentation |
 |---|---|---|---|
-| `board/` | `board_io.c`, `watchdog.c` | Status LEDs, PA enable, `COMM_SEL`, factory reset button, hardware watchdog | [board.md](../src/board/_doc/board.md) |
+| `board/` | `board_io.c`, `hw_id.c`, `watchdog.c` | Hardware variant (HW_ID jumpers), status LEDs, PA enable, `COMM_SEL`, factory reset button, hardware watchdog | [board.md](../src/board/_doc/board.md) |
 | `config/` | `config_store.c` | Persistent network and display settings (NVS) | [config.md](../src/config/_doc/config.md) |
 | `radio/` | `sx1255.c`, `sx1255_regs.h` | SX1255 over SPI: frequencies, gains, sample rate, modes | [radio.md](../src/radio/_doc/radio.md) |
 | `stream/` | `stream.c`, `sample_io.c` | SAI1 and eDMA, sample counter, RX pump, TX ingest | [stream.md](../src/stream/_doc/stream.md) |
 | `control/` | `control.c` | Host session and control commands, independent of the transport | [control.md](../src/control/_doc/control.md) |
 | `ethernet/` | `transport_eth.c`, `net_config.c`, `web_ui.c` | TCP/UDP transport, addressing, mDNS, web interface | [ethernet.md](../src/ethernet/_doc/ethernet.md) |
 | `usb/` | `transport_usb.c` | HS USB vendor function with bulk endpoints | [usb.md](../src/usb/_doc/usb.md) |
-| `display/` | `display_ui.c`, `display_fb.c` | Front panel: OLED status pages, menu, encoder | [display.md](../src/display/_doc/display.md) |
+| `display/` | `display_ui.c`, `display_fb.c`, `splash_logo.c` | Front panel: OLED start screen, status pages, menu, encoder | [display.md](../src/display/_doc/display.md) |
 | `shell/` | `shell_commands.c` | Console commands for diagnostics | [shell.md](../src/shell/_doc/shell.md) |
 
 Headers are included with their module folder (`#include "stream/stream.h"`);
@@ -41,16 +41,19 @@ protocol shared with the host is in
 
 1. `EARLY` init level: PA_EN is driven inactive before clock setup and before
    any driver ([board.md](../src/board/_doc/board.md#pa-enable)).
-2. `main()`: board I/O, watchdog (red LED blinks slowly after a watchdog
-   reset), factory reset check (SW2), settings, SX1255 (433.92 MHz, 600 kHz),
+2. `main()`: hardware variant from the HW_ID jumpers. On unsupported
+   hardware the start-up stops here; only the console runs, the front panel
+   shows an error screen and the red LED of the FRDM-MCXN947 blinks
+   ([board.md](../src/board/_doc/board.md#hardware-variant)).
+3. Board I/O, watchdog (LED0 blinks slowly after a watchdog reset), factory reset check (SW2), settings, SX1255 (433.92 MHz, 600 kHz),
    stream, control and RX pump.
-3. Ethernet is always configured and the web interface and the front panel
+4. Ethernet is always configured and the web interface and the front panel
    are started, independent of `COMM_SEL`.
-4. Depending on `COMM_SEL`, the Ethernet or the USB transport is started.
+5. Depending on `COMM_SEL`, the Ethernet or the USB transport is started.
    The green LED then blinks slowly (ready, no host).
 
-An initialization error lights the red LED; the firmware keeps running so
-that the console and the web interface stay available.
+An initialization error in steps 3 to 5 lights LED0 (red); the firmware
+keeps running so that the console and the web interface stay available.
 
 ## Threads and interrupts
 

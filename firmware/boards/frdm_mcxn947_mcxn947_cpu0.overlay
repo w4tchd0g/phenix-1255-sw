@@ -21,6 +21,8 @@
 		led-err = &led_err;
 		led-warn = &led_warn;
 		led-ok = &led_ok;
+		/* Red LED on the FRDM-MCXN947 (P0_10), unsupported hardware */
+		led-frdm-err = &red_led;
 	};
 
 	/* Status LEDs on the phenix-1255-hw board */
@@ -50,6 +52,13 @@
 		comm-sel-gpios = <&gpio2 7 (GPIO_ACTIVE_HIGH | GPIO_PULL_UP)>;
 		/* SW2, held during boot = factory reset */
 		factory-reset-gpios = <&gpio0 23 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+		/*
+		 * HW_ID0..HW_ID2 solder jumpers to +3V3, open = 0. The internal
+		 * pull-downs define the level of open jumpers.
+		 */
+		hw-id-gpios = <&gpio3 5 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>,
+			      <&gpio3 4 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>,
+			      <&gpio4 4 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>;
 	};
 
 	/*

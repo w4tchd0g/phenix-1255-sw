@@ -115,6 +115,8 @@ an exact sample. Details: [architecture.md](_doc/architecture.md).
 - PA enable output switched only on TX stream start/stop, with immediate
   shutdown on link loss or errors; hardware watchdog.
 - Factory reset by holding SW2 during boot.
+- Hardware variant detection (HW_ID solder jumpers); the firmware does not
+  start on unsupported hardware.
 
 **Front panel**
 - 0.96" SSD1306 OLED with status pages (frequencies, link, network, gains,
@@ -361,7 +363,7 @@ transmitting tests. All commands: [shell.md](firmware/src/shell/_doc/shell.md).
 | `firmware/` | Zephyr application for the FRDM-MCXN947, one folder per module in `firmware/src/` |
 | `common/` | Wire protocol definitions shared by firmware and host |
 | `soapy/` | SoapySDR module, test programs in `soapy/tests/`, udev rule in `soapy/udev/` |
-| `tools/` | Protocol test client |
+| `tools/` | Protocol test client, logo converter for the front panel start screen |
 | `patches/` | Patches for TETRA-Bluestation and FlowStation |
 | `_doc/`, `*/_doc/` | Documentation, next to the code it describes |
 | `west.yml` | West manifest pinning the Zephyr revision |
@@ -377,7 +379,7 @@ code.
 | Firmware | [Structure, threads, memory, PA safety](firmware/_doc/firmware.md) |
 | Firmware modules | [Board I/O](firmware/src/board/_doc/board.md) · [Configuration](firmware/src/config/_doc/config.md) · [SX1255](firmware/src/radio/_doc/radio.md) · [Sample stream and timing](firmware/src/stream/_doc/stream.md) · [Control](firmware/src/control/_doc/control.md) · [Ethernet](firmware/src/ethernet/_doc/ethernet.md) · [HS USB and test PID](firmware/src/usb/_doc/usb.md) · [Front panel](firmware/src/display/_doc/display.md) · [Console commands](firmware/src/shell/_doc/shell.md) |
 | Protocol | [Wire protocol](common/_doc/protocol.md) |
-| Host | [SoapySDR module](soapy/_doc/soapy.md) · [Test programs](soapy/tests/_doc/tests.md) · [Protocol test client](tools/_doc/phx_client.md) |
+| Host | [SoapySDR module](soapy/_doc/soapy.md) · [Test programs](soapy/tests/_doc/tests.md) · [Protocol test client](tools/_doc/phx_client.md) · [Logo converter](tools/_doc/logo_to_c.md) |
 | Stations | [Patches for TETRA-Bluestation and FlowStation](patches/_doc/patches.md) |
 
 ## Acknowledgements

@@ -15,11 +15,13 @@ target_include_directories(app PRIVATE
 target_sources(app PRIVATE
   src/main.c
   src/board/board_io.c
+  src/board/hw_id.c
   src/board/watchdog.c
   src/config/config_store.c
   src/control/control.c
   src/display/display_fb.c
   src/display/display_ui.c
+  src/display/splash_logo.c
   src/ethernet/net_config.c
   src/ethernet/transport_eth.c
   src/ethernet/web_ui.c

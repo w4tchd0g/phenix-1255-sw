@@ -2,6 +2,7 @@
 
 `board_io.c` drives the board-level I/O of phenix-1255-hw: PA enable, the
 three status LEDs, the `COMM_SEL` switch and the factory reset button (SW2).
+`hw_id.c` detects the hardware variant from the HW_ID solder jumpers.
 `watchdog.c` runs the hardware watchdog. Pins:
 [hardware.md](../../../../_doc/hardware.md#pin-assignment).
 
@@ -31,7 +32,8 @@ PA off in this window.
 
 A short flash of LED1 indicates a late TX packet or an RX overflow.
 LED0 blinks slowly after a watchdog reset until the next successful stream
-start.
+start. The red LED of the FRDM-MCXN947 itself (P0_10) is used only on
+unsupported hardware ([Hardware variant](#hardware-variant)).
 
 ## COMM_SEL switch
 
@@ -49,6 +51,54 @@ for two seconds. The network configuration returns to the factory defaults
 (DHCP on, fallback address 192.168.2.10/24, control port 1255/TCP, sample
 port 1256/UDP), the display settings to theirs. The front panel menu offers
 the same reset at runtime ([display.md](../../display/_doc/display.md#menu)).
+
+## Hardware variant
+
+Three solder jumpers connect HW_ID0 (P3_5), HW_ID1 (P3_4) and HW_ID2 (P4_4)
+to +3V3. The internal pull-downs of the pins are enabled, so an open jumper
+reads 0 and a closed one 1; HW_ID*n* is bit *n* of the hardware ID.
+`hw_id.c` reads the jumpers as the first step of `main()`, before any other
+pin is configured, with a majority vote over five samples 5 ms apart.
+
+All possible IDs (1 = jumper closed to +3V3, 0 = open):
+
+| HW_ID2 | HW_ID1 | HW_ID0 | ID | Variant | Hardware | Firmware |
+|---|---|---|---|---|---|---|
+| 0 | 0 | 0 | 0 | base | phenix-1255-hw | Supported |
+| 0 | 0 | 1 | 1 | | not assigned | Start-up halted |
+| 0 | 1 | 0 | 2 | | not assigned | Start-up halted |
+| 0 | 1 | 1 | 3 | | not assigned | Start-up halted |
+| 1 | 0 | 0 | 4 | | not assigned | Start-up halted |
+| 1 | 0 | 1 | 5 | | not assigned | Start-up halted |
+| 1 | 1 | 0 | 6 | | not assigned | Start-up halted |
+| 1 | 1 | 1 | 7 | | not assigned | Start-up halted |
+
+µCell and compatible boards have no HW_ID jumpers; the open pins read as
+ID 0 and the firmware runs as base
+([hardware.md](../../../../_doc/hardware.md#µcell-and-compatible-boards)).
+
+The variant is shown in the boot log, by `phenix status`, in the web
+interface (`hardware` and `hw_id` in `/status.json`) and on the HARDWARE
+page of the front panel. A new variant is added to the `variants` table in
+`hw_id.c`.
+
+On any other ID, or if the jumpers cannot be read, the firmware does not
+start:
+
+- The error and the supported IDs are printed on the console and repeated
+  every 5 s.
+- The red LED of the FRDM-MCXN947 (P0_10) blinks fast (5 Hz). The LEDs of
+  phenix-1255-hw are not driven, because it is unknown what their pins are
+  connected to on such hardware.
+- The front panel shows a static error screen with the ID read and the
+  supported IDs. The OLED keeps its image across an MCU reset, so the
+  screen is always overwritten.
+- Nothing else is initialized: no SX1255, stream, settings, network, USB,
+  front panel thread or watchdog. PA_EN stays off from the early init
+  ([PA enable](#pa-enable)); the factory reset button is not evaluated.
+- The console stays usable. `phenix status` shows the detected ID; commands
+  that would access the SX1255 or the settings are refused
+  ([shell.md](../../shell/_doc/shell.md#phenix)).
 
 ## Watchdog
 

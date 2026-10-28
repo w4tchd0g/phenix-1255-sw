@@ -20,11 +20,13 @@
 #include <zephyr/app_version.h>
 
 #include "board/board_io.h"
+#include "board/hw_id.h"
 #include "board/watchdog.h"
 #include "config/config_store.h"
 #include "control/control.h"
 #include "display/display_fb.h"
 #include "display/display_ui.h"
+#include "display/splash_logo.h"
 #include "ethernet/net_config.h"
 #include "radio/sx1255.h"
 #include "radio/sx1255_regs.h"
@@ -38,7 +40,7 @@ LOG_MODULE_REGISTER(display_ui, LOG_LEVEL_INF);
 #define UI_PRIORITY   K_PRIO_PREEMPT(9)
 
 #define REFRESH_MS      250
-#define SPLASH_MS       1500
+#define SPLASH_MS       3000
 #define PAGE_PERIOD_MS  5000
 /* Automatic page cycling resumes this long after a manual page change */
 #define MANUAL_HOLD_MS  60000
@@ -64,6 +66,10 @@ LOG_MODULE_REGISTER(display_ui, LOG_LEVEL_INF);
 
 /* Inset of menu labels and values from the screen edges */
 #define MENU_INSET 2
+
+/* Start screen: phoenix at the left of the blue zone, text to its right */
+#define SPLASH_LOGO_X   4
+#define SPLASH_TEXT_GAP 5
 
 static const struct device *const disp = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
 
@@ -99,11 +105,12 @@ enum page {
 	PAGE_RF,
 	PAGE_STREAM,
 	PAGE_SYSTEM,
+	PAGE_HARDWARE,
 	PAGE_COUNT,
 };
 
 static const char *const page_titles[PAGE_COUNT] = {
-	"STATUS", "NETWORK", "RF", "STREAM", "SYSTEM",
+	"STATUS", "NETWORK", "RF", "STREAM", "SYSTEM", "HARDWARE",
 };
 
 enum item {
@@ -447,6 +454,17 @@ static void draw_page_system(void)
 	line(5, "   %s", (strlen(serial) > 16U) ? &serial[16] : "");
 }
 
+static void draw_page_hardware(void)
+{
+	char bits[HW_ID_BITS + 1];
+
+	hw_id_bits_str(bits, sizeof(bits));
+
+	line(0, "Variant  %s", hw_id_name());
+	line(1, "HW ID    %d (%s)", hw_id_get(), bits);
+	line(2, "Host link %s", board_comm_mode_str(board_io_comm_mode()));
+}
+
 static void draw_pages(const struct ui_status *s)
 {
 	char title[16];
@@ -468,8 +486,11 @@ static void draw_pages(const struct ui_status *s)
 		draw_page_stream(s);
 		break;
 	case PAGE_SYSTEM:
-	default:
 		draw_page_system();
+		break;
+	case PAGE_HARDWARE:
+	default:
+		draw_page_hardware();
 		break;
 	}
 }
@@ -958,11 +979,15 @@ static void draw_message(const struct ui_status *s)
 
 static void draw_splash(void)
 {
-	fb_text(fb, ROW_TITLE, (FB_WIDTH - fb_text_width("PHENIX-1255")) / 2, "PHENIX-1255",
-		false);
-	line(1, "  SX1255 transceiver");
-	line(3, "  FW %s", APP_VERSION_EXTENDED_STRING);
-	line(4, "  Starting ...");
+	const int yellow_height = ROW_BODY * 8;
+	const int text_x = SPLASH_LOGO_X + splash_phoenix.width + SPLASH_TEXT_GAP;
+
+	fb_bitmap(fb, (FB_WIDTH - splash_title.width) / 2,
+		  (yellow_height - splash_title.height) / 2, &splash_title);
+	fb_bitmap(fb, SPLASH_LOGO_X, yellow_height, &splash_phoenix);
+	fb_text(fb, ROW_BODY + 1, text_x, "SX1255 SDR", false);
+	fb_text(fb, ROW_BODY + 2, text_x, "FW " APP_VERSION_STRING, false);
+	fb_text(fb, ROW_BODY + 4, text_x, "Starting ...", false);
 }
 
 /* Marks the colour zones: yellow rows 0..15 lit, blue rows 16..63 framed */
@@ -1229,4 +1254,37 @@ int display_ui_start(void)
 	k_thread_start(ui_tid);
 
 	return 0;
+}
+
+void display_ui_show_hw_error(void)
+{
+	char bits[HW_ID_BITS + 1];
+	char supported[FB_COLS + 1];
+
+	if (!device_is_ready(disp)) {
+		return;
+	}
+
+	hw_id_bits_str(bits, sizeof(bits));
+	hw_id_supported_str(supported, sizeof(supported));
+
+	fb_clear(fb);
+	fb_text(fb, ROW_TITLE, 0, "PHENIX-1255", false);
+	fb_text(fb, ROW_SUB, 0, "HARDWARE ERROR", false);
+	line(0, "Unsupported hardware");
+	if (hw_id_get() < 0) {
+		line(1, "HW ID not readable");
+	} else {
+		line(1, "HW ID %d (%s)", hw_id_get(), bits);
+	}
+	line(2, "Supported: %s", supported);
+	line(4, "Start-up halted");
+	line(5, "See console");
+
+	/* The panel keeps its last image across an MCU reset; always overwrite it */
+	(void)display_set_pixel_format(disp, PIXEL_FORMAT_MONO01);
+	set_contrast(PHENIX_DEFAULT_DISPLAY_CONTRAST * CONTRAST_STEP);
+	fb_sent_valid = false;
+	flush();
+	(void)display_blanking_off(disp);
 }

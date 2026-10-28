@@ -13,7 +13,7 @@ the relocation script would otherwise pick Zephyr's own `shell_cmds.c`
 
 | Command | Purpose |
 |---|---|
-| `phenix status` | Host link selected by `COMM_SEL` at boot and the current pin level, PA state |
+| `phenix status` | Hardware variant and HW_ID jumpers, host link selected by `COMM_SEL` at boot and the current pin level, PA state |
 | `phenix led <err\|warn\|ok> <off\|on\|slow\|fast>` | Set an LED ([board.md](../../board/_doc/board.md#status-leds)) |
 | `phenix wdt_test` | Stop feeding the watchdog, provokes a reset ([board.md](../../board/_doc/board.md#watchdog)) |
 | `phenix config show` | Stored network configuration |
@@ -24,6 +24,11 @@ the relocation script would otherwise pick Zephyr's own `shell_cmds.c`
 | `phenix display dump` | Print the content last sent to the display ([display.md](../../display/_doc/display.md)) |
 
 Network settings take effect after `kernel reboot cold`.
+
+On unsupported hardware the start-up is halted
+([board.md](../../board/_doc/board.md#hardware-variant)). `phenix status`
+then shows only the hardware line; `phenix config set` and all `sx1255`
+commands are refused.
 
 ## sx1255
 

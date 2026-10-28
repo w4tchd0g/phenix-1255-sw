@@ -19,6 +19,7 @@ Every module documents itself in its own `_doc` folder.
 | SoapySDR module | `soapy/` | [soapy.md](../soapy/_doc/soapy.md) |
 | Test programs | `soapy/tests/` | [tests.md](../soapy/tests/_doc/tests.md) |
 | Protocol test client | `tools/` | [phx_client.md](../tools/_doc/phx_client.md) |
+| Logo converter for the start screen | `tools/` | [logo_to_c.md](../tools/_doc/logo_to_c.md) |
 | Station patches | `patches/` | [patches.md](../patches/_doc/patches.md) |
 
 System-wide documents in this folder:

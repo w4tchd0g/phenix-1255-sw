@@ -141,5 +141,5 @@ jobs:
           SOAPY_SDR_PLUGIN_PATH="$PWD/build/soapy" SoapySDRUtil --info | tee soapy-info.txt
           grep -q "Available factories.*phenix-1255" soapy-info.txt
 
-      - name: Check the protocol test client
-        run: python3 -m py_compile tools/phx_client.py
+      - name: Check the Python tools
+        run: python3 -m py_compile tools/phx_client.py tools/logo_to_c.py

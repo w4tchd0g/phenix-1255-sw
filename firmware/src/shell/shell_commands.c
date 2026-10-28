@@ -14,6 +14,7 @@
 #include <zephyr/shell/shell.h>
 
 #include "board/board_io.h"
+#include "board/hw_id.h"
 #include "board/watchdog.h"
 #include "config/config_store.h"
 #include "display/display_fb.h"
@@ -40,10 +41,33 @@ static void print_net_cfg(const struct shell *sh, const struct phenix_net_cfg *c
 	shell_print(sh, "sample_port: %u (UDP)", cfg->sample_port);
 }
 
+/*
+ * On unsupported hardware the start-up is halted: the SX1255 and the configuration
+ * store are not initialized, and the board must not be written to.
+ */
+static int check_hw(const struct shell *sh)
+{
+	if (!hw_id_is_supported()) {
+		shell_error(sh, "Unsupported hardware, start-up halted (see 'phenix status')");
+		return -ENODEV;
+	}
+
+	return 0;
+}
+
 static int cmd_status(const struct shell *sh, size_t argc, char **argv)
 {
+	char bits[HW_ID_BITS + 1];
+
 	ARG_UNUSED(argc);
 	ARG_UNUSED(argv);
+
+	hw_id_bits_str(bits, sizeof(bits));
+	shell_print(sh, "hardware:    %s (HW_ID2..0 = %s)", hw_id_name(), bits);
+	if (!hw_id_is_supported()) {
+		shell_print(sh, "start-up:    halted");
+		return 0;
+	}
 
 	int level = board_io_comm_sel_level();
 
@@ -89,6 +113,11 @@ static int cmd_config_set(const struct shell *sh, size_t argc, char **argv)
 	int ret = 0;
 
 	ARG_UNUSED(argc);
+
+	ret = check_hw(sh);
+	if (ret < 0) {
+		return ret;
+	}
 
 	config_store_get_net(&cfg);
 
@@ -310,6 +339,12 @@ static int parse_u32(const char *str, uint32_t *out)
 
 static int check_ready(const struct shell *sh)
 {
+	int ret = check_hw(sh);
+
+	if (ret < 0) {
+		return ret;
+	}
+
 	if (!sx1255_is_ready()) {
 		shell_error(sh, "SX1255 not initialized (use 'sx1255 reset')");
 		return -ENODEV;
@@ -366,6 +401,11 @@ static int cmd_sx_reset(const struct shell *sh, size_t argc, char **argv)
 	ARG_UNUSED(argc);
 	ARG_UNUSED(argv);
 
+	ret = check_hw(sh);
+	if (ret < 0) {
+		return ret;
+	}
+
 	ret = sx1255_init();
 	if (ret < 0) {
 		shell_error(sh, "Init failed (%d)", ret);
@@ -381,6 +421,11 @@ static int cmd_sx_dump(const struct shell *sh, size_t argc, char **argv)
 
 	ARG_UNUSED(argc);
 	ARG_UNUSED(argv);
+
+	ret = check_hw(sh);
+	if (ret < 0) {
+		return ret;
+	}
 
 	ret = sx1255_read_regs(0, buf, sizeof(buf));
 	if (ret < 0) {
@@ -398,6 +443,11 @@ static int cmd_sx_reg_read(const struct shell *sh, size_t argc, char **argv)
 	uint32_t addr;
 	uint32_t len = 1;
 	int ret;
+
+	ret = check_hw(sh);
+	if (ret < 0) {
+		return ret;
+	}
 
 	if (parse_u32(argv[1], &addr) < 0 || addr > SX1255_ADDR_MASK ||
 	    (argc > 2 && (parse_u32(argv[2], &len) < 0 || len == 0U || len > sizeof(buf)))) {
@@ -425,6 +475,11 @@ static int cmd_sx_reg_write(const struct shell *sh, size_t argc, char **argv)
 	int ret;
 
 	ARG_UNUSED(argc);
+
+	ret = check_hw(sh);
+	if (ret < 0) {
+		return ret;
+	}
 
 	if (parse_u32(argv[1], &addr) < 0 || addr > SX1255_ADDR_MASK ||
 	    parse_u32(argv[2], &val) < 0 || val > 0xFFU) {
