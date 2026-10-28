@@ -115,7 +115,7 @@ an exact sample. Details: [architecture.md](_doc/architecture.md).
 - PA enable output switched only on TX stream start/stop, with immediate
   shutdown on link loss or errors; hardware watchdog.
 - Factory reset by holding SW2 during boot.
-- Hardware variant detection (HW_ID solder jumpers); the firmware does not
+- Hardware variant detection (HW_ID pins); the firmware does not
   start on unsupported hardware.
 
 **Front panel**

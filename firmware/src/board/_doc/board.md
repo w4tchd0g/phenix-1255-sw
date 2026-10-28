@@ -2,7 +2,7 @@
 
 `board_io.c` drives the board-level I/O of phenix-1255-hw: PA enable, the
 three status LEDs, the `COMM_SEL` switch and the factory reset button (SW2).
-`hw_id.c` detects the hardware variant from the HW_ID solder jumpers.
+`hw_id.c` detects the hardware variant from the HW_ID pins.
 `watchdog.c` runs the hardware watchdog. Pins:
 [hardware.md](../../../../_doc/hardware.md#pin-assignment).
 
@@ -54,13 +54,17 @@ the same reset at runtime ([display.md](../../display/_doc/display.md#menu)).
 
 ## Hardware variant
 
-Three solder jumpers connect HW_ID0 (P3_5), HW_ID1 (P3_4) and HW_ID2 (P4_4)
-to +3V3. The internal pull-downs of the pins are enabled, so an open jumper
-reads 0 and a closed one 1; HW_ID*n* is bit *n* of the hardware ID.
-`hw_id.c` reads the jumpers as the first step of `main()`, before any other
+The hardware ID is read from HW_ID0 (P3_5), HW_ID1 (P3_4) and HW_ID2 (P4_4);
+HW_ID*n* is bit *n* of the ID. The internal pull-downs of the pins are
+enabled, so an open pin reads 0 and a pin tied to +3V3 reads 1.
+phenix-1255-hw has no HW_ID jumpers; its pins stay open and read as ID 0
+(base). The same applies to µCell and compatible boards
+([hardware.md](../../../../_doc/hardware.md#µcell-and-compatible-boards)).
+Later boards set their ID with solder jumpers from these pins to +3V3.
+`hw_id.c` reads the pins as the first step of `main()`, before any other
 pin is configured, with a majority vote over five samples 5 ms apart.
 
-All possible IDs (1 = jumper closed to +3V3, 0 = open):
+All possible IDs (1 = pin tied to +3V3, 0 = open):
 
 | HW_ID2 | HW_ID1 | HW_ID0 | ID | Variant | Hardware | Firmware |
 |---|---|---|---|---|---|---|
@@ -73,16 +77,12 @@ All possible IDs (1 = jumper closed to +3V3, 0 = open):
 | 1 | 1 | 0 | 6 | | not assigned | Start-up halted |
 | 1 | 1 | 1 | 7 | | not assigned | Start-up halted |
 
-µCell and compatible boards have no HW_ID jumpers; the open pins read as
-ID 0 and the firmware runs as base
-([hardware.md](../../../../_doc/hardware.md#µcell-and-compatible-boards)).
-
 The variant is shown in the boot log, by `phenix status`, in the web
 interface (`hardware` and `hw_id` in `/status.json`) and on the HARDWARE
 page of the front panel. A new variant is added to the `variants` table in
 `hw_id.c`.
 
-On any other ID, or if the jumpers cannot be read, the firmware does not
+On any other ID, or if the pins cannot be read, the firmware does not
 start:
 
 - The error and the supported IDs are printed on the console and repeated

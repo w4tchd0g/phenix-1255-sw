@@ -29,7 +29,7 @@ dummy load on the TX output and on the PA output.
 | Step | Procedure | Expected |
 |---|---|---|
 | Boot | Power on, watch the console | No errors in the boot log; `phenix status` shows `hardware: base (HW_ID2..0 = 000)`, `pa: disabled` and `comm_sel` matching the switch |
-| Unsupported hardware | Close one HW_ID jumper (or connect P3_5 to +3V3), reset; open it again afterwards | Console repeats `Unsupported hardware: HW_ID2..0 = 001` every 5 s, red FRDM LED blinks fast, no LED of phenix-1255-hw lit, display shows `HARDWARE ERROR` and `HW ID 1 (001)`, no network or USB device; `phenix status` shows `start-up: halted`, `sx1255` commands are refused |
+| Unsupported hardware | Connect P3_5 (HW_ID0) to +3V3, reset; remove the connection afterwards | Console repeats `Unsupported hardware: HW_ID2..0 = 001` every 5 s, red FRDM LED blinks fast, no LED of phenix-1255-hw lit, display shows `HARDWARE ERROR` and `HW ID 1 (001)`, no network or USB device; `phenix status` shows `start-up: halted`, `sx1255` commands are refused |
 | SX1255 | `sx1255 info` | Version read back, reference 38400000 Hz, RX and TX PLL locked |
 | PA off at idle | Measure P2_4 and the PA supply (VBAT3 after the MOSFET) after boot | P2_4 high, PA supply off |
 | PA off in reset | Hold the reset button; halt the MCU with the debugger | PA supply stays off (gate pull-up) |
