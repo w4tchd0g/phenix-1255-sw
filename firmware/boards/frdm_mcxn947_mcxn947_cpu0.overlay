@@ -1,0 +1,240 @@
+/*
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Phenix-1255 contributors
+ *
+ * phenix-1255-hw SX1255 board attached to the FRDM-MCXN947.
+ */
+
+#include <nxp/mcx/mcxn/pinctrl/MCXN947VDF-pinctrl.h>
+#include <zephyr/dt-bindings/input/input-event-codes.h>
+
+/ {
+	chosen {
+		zephyr,code-partition = &code_partition;
+		zephyr,settings-partition = &settings_partition;
+		zephyr,display = &oled;
+		/* The second core is not used */
+		/delete-property/ zephyr,code-cpu1-partition;
+	};
+
+	aliases {
+		led-err = &led_err;
+		led-warn = &led_warn;
+		led-ok = &led_ok;
+	};
+
+	/* Status LEDs on the phenix-1255-hw board */
+	phenix_leds {
+		compatible = "gpio-leds";
+
+		led_err: led_err {
+			gpios = <&gpio0 14 GPIO_ACTIVE_HIGH>;
+			label = "LED0 red (ERR)";
+		};
+
+		led_warn: led_warn {
+			gpios = <&gpio0 22 GPIO_ACTIVE_HIGH>;
+			label = "LED1 yellow (WARN/INFO)";
+		};
+
+		led_ok: led_ok {
+			gpios = <&gpio0 15 GPIO_ACTIVE_HIGH>;
+			label = "LED2 green (OK)";
+		};
+	};
+
+	zephyr,user {
+		/* Gate of the P-MOSFET switching VBAT3 to the SX1255 PA */
+		pa-en-gpios = <&gpio2 4 GPIO_ACTIVE_LOW>;
+		/* COMM_SEL switch: high (open) = HS USB, low = Ethernet */
+		comm-sel-gpios = <&gpio2 7 (GPIO_ACTIVE_HIGH | GPIO_PULL_UP)>;
+		/* SW2, held during boot = factory reset */
+		factory-reset-gpios = <&gpio0 23 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+	};
+
+	/*
+	 * Operator inputs for the display menu. SW3 (ISP mode select, only
+	 * sampled by the boot ROM) is free after boot and steps like one
+	 * encoder detent.
+	 */
+	phenix_keys {
+		compatible = "gpio-keys";
+
+		enc_button: enc_button {
+			gpios = <&gpio0 11 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+			zephyr,code = <INPUT_KEY_ENTER>;
+			label = "Rotary encoder push button";
+		};
+
+		sw3_button: sw3_button {
+			gpios = <&gpio0 6 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+			zephyr,code = <INPUT_KEY_DOWN>;
+			label = "User SW3";
+		};
+	};
+
+	encoder: encoder {
+		compatible = "gpio-qdec";
+		/* A, B */
+		gpios = <&gpio1 19 (GPIO_ACTIVE_HIGH | GPIO_PULL_UP)>,
+			<&gpio1 18 (GPIO_ACTIVE_HIGH | GPIO_PULL_UP)>;
+		/* One event per detent of a 4-step-per-detent encoder */
+		steps-per-period = <4>;
+		zephyr,axis = <INPUT_REL_WHEEL>;
+		sample-time-us = <2000>;
+		idle-timeout-ms = <200>;
+	};
+};
+
+/*
+ * SW2 is the boot-time factory reset input only (board_io.c); the board's
+ * gpio-keys node would also report it as an input event.
+ */
+&{/gpio_keys} {
+	status = "disabled";
+};
+
+/*
+ * The UI peripherals must never delay the sample path: their interrupts
+ * run below the eDMA (0) and SAI (2) interrupts.
+ */
+&flexcomm3 {
+	interrupts = <38 3>;
+};
+
+&gpio0 {
+	interrupts = <17 3>, <18 3>;
+};
+
+&gpio1 {
+	interrupts = <19 3>, <20 3>;
+};
+
+/* The touch slider is not used; CONFIG_INPUT would start its scan timer */
+&tsi0 {
+	status = "disabled";
+};
+
+/*
+ * 0.96" 128x64 OLED (SSD1306) on the mikroBUS I2C pins P1_0 (SDA) and
+ * P1_1 (SCL). Modules label the address in 8-bit form (0x78/0x7A write,
+ * 0x79/0x7B read); the module found on the bus answers at 7-bit 0x3C.
+ */
+&flexcomm3_lpi2c3 {
+	clock-frequency = <I2C_BITRATE_FAST>;
+	/*
+	 * Without an idle timeout the bus busy flag stays set after boot and
+	 * the HAL refuses every transfer; 10 us is far above one SCL period.
+	 */
+	bus-idle-timeout = <10000>;
+	status = "okay";
+
+	oled: ssd1306@3c {
+		compatible = "solomon,ssd1306";
+		reg = <0x3c>;
+		width = <128>;
+		height = <64>;
+		segment-offset = <0>;
+		page-offset = <0>;
+		display-offset = <0>;
+		multiplex-ratio = <63>;
+		segment-remap;
+		com-invdir;
+		prechargep = <0x22>;
+	};
+};
+
+&pinctrl {
+	/* LPSPI1 without the hardware PCS on P0_27 (on-board green LED) */
+	pinmux_phenix_lpspi1: pinmux_phenix_lpspi1 {
+		group0 {
+			pinmux = <FC1_P0_PIO0_24>,	/* SDO  -> SX1255 SDI (MOSI) */
+				 <FC1_P1_PIO0_25>,	/* SCK  -> SX1255 SCK */
+				 <FC1_P2_PIO0_26>;	/* SDI  <- SX1255 SDO (MISO) */
+			slew-rate = "fast";
+			drive-strength = "low";
+			input-enable;
+		};
+	};
+
+	/*
+	 * SAI1 I/Q interface. The SX1255 is bit clock and frame sync controller;
+	 * TX runs synchronous to RX, so TX_BCLK/TX_FS (P3_16/P3_17) are unused.
+	 */
+	pinmux_phenix_sai1: pinmux_phenix_sai1 {
+		group0 {
+			pinmux = <SAI1_RX_BCLK_PIO3_18>,	/* <- CK_OUT */
+				 <SAI1_RX_FS_PIO3_19>,		/* <- DIO2/WS */
+				 <SAI1_TXD0_PIO3_20>,		/* -> I_IN */
+				 <SAI1_RXD0_PIO3_21>;		/* <- I_OUT */
+			drive-strength = "high";
+			slew-rate = "fast";
+			input-enable;
+		};
+	};
+};
+
+/*
+ * SAI1 and eDMA0 are driven directly by the stream module (circular eDMA,
+ * sample counter). Status "okay" lets the board code enable the SAI1
+ * clock; the Zephyr I2S and DMA drivers are not enabled.
+ */
+&sai1 {
+	pinctrl-0 = <&pinmux_phenix_sai1>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&flexcomm1_lpspi1 {
+	pinctrl-0 = <&pinmux_phenix_lpspi1>;
+	pinctrl-names = "default";
+	cs-gpios = <&gpio0 31 GPIO_ACTIVE_LOW>;
+	status = "okay";
+
+	sx1255: sx1255@0 {
+		compatible = "semtech,sx1255";
+		reg = <0>;
+		spi-max-frequency = <10000000>;
+		clock-frequency = <38400000>;
+		reset-gpios = <&gpio0 29 GPIO_ACTIVE_HIGH>;
+		dio0-gpios = <&gpio0 28 GPIO_ACTIVE_HIGH>;
+		dio1-gpios = <&gpio0 30 GPIO_ACTIVE_HIGH>;
+		dio3-gpios = <&gpio0 19 GPIO_ACTIVE_HIGH>;
+	};
+};
+
+/* The second core is not used: give all of SRAM A..H (416 KB) to cpu0 */
+&sram0 {
+	reg = <0x20000000 DT_SIZE_K(416)>;
+};
+
+/* Stable MAC address derived from the MCU unique ID (locally administered) */
+&enet {
+	/delete-property/ zephyr,random-mac-address;
+	nxp,unique-mac;
+};
+
+/*
+ * Internal flash layout. MCUboot is not used, so the board's MCUboot
+ * partitions are replaced by one code partition and a settings partition
+ * at the end of the internal flash.
+ */
+&flash {
+	/delete-node/ partitions;
+
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		code_partition: partition@0 {
+			label = "code";
+			reg = <0x00000000 DT_SIZE_K(1984)>;
+		};
+
+		settings_partition: partition@1f0000 {
+			label = "settings";
+			reg = <0x001f0000 DT_SIZE_K(64)>;
+		};
+	};
+};

@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Phenix-1255 contributors
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Firmware follows the Zephyr coding style (tabs, 100 columns).
+[firmware/**.{c,h}]
+indent_style = tab
+indent_size = 8
+max_line_length = 100
+
+[common/**.h]
+indent_style = tab
+indent_size = 8
+max_line_length = 100
+
+[{CMakeLists.txt,*.cmake}]
+indent_style = space
+indent_size = 2
+
+# SoapySDR module uses 4 spaces like other SoapySDR modules.
+[soapy/**.{cpp,hpp,h}]
+indent_style = space
+indent_size = 4
+max_line_length = 100
+
+[*.{py,yaml,yml,conf}]
+indent_style = space
+indent_size = 4
+
+[*.{overlay,dts,dtsi}]
+indent_style = tab
+indent_size = 8
+
+[*.md]
+trim_trailing_whitespace = false
