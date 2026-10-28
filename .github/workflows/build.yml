@@ -1,0 +1,138 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Phenix-1255 contributors
+#
+# Builds the firmware and the SoapySDR module on every push to develop and
+# for pull requests from develop to main. Compiler warnings fail the build.
+# Only Linux runners are used; macOS builds are checked locally. No hardware
+# is available here, so the tests in _doc/testing.md are not run.
+
+name: Build
+
+on:
+  push:
+    branches: [develop]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  firmware:
+    name: Firmware (frdm_mcxn947)
+    # Pull requests are only built when they come from develop
+    if: github.event_name == 'push' || github.head_ref == 'develop'
+    runs-on: ubuntu-24.04
+    env:
+      ZEPHYR_SDK_INSTALL_DIR: ${{ github.workspace }}/zephyr-sdk
+    steps:
+      # west.yml places the manifest repository at <workspace>/phenix-1255-sw
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: phenix-1255-sw
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install host packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ninja-build gperf ccache \
+            device-tree-compiler
+          pip install west
+
+      - name: Cache Zephyr and modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            zephyr
+            modules
+          key: west-${{ hashFiles('phenix-1255-sw/west.yml') }}
+
+      - name: Fetch Zephyr
+        run: |
+          west init -l phenix-1255-sw
+          west update --narrow -o=--depth=1
+          west packages pip --install
+
+      # The SDK version follows the Zephyr revision pinned in west.yml
+      - name: Cache Zephyr SDK
+        id: sdk-cache
+        uses: actions/cache@v4
+        with:
+          path: zephyr-sdk
+          key: zephyr-sdk-${{ runner.os }}-${{ hashFiles('zephyr/SDK_VERSION') }}
+
+      - name: Install Zephyr SDK
+        if: steps.sdk-cache.outputs.cache-hit != 'true'
+        run: >
+          west sdk install --gnu-toolchains arm-zephyr-eabi --no-hosttools
+          --install-dir "$ZEPHYR_SDK_INSTALL_DIR"
+          --personal-access-token "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Build
+        working-directory: phenix-1255-sw
+        run: |
+          set -o pipefail
+          west build -p always -b frdm_mcxn947/mcxn947/cpu0 -d build/firmware firmware \
+            -- -DCONFIG_COMPILER_WARNINGS_AS_ERRORS=y 2>&1 | tee build-firmware.log
+
+      - name: Memory report
+        working-directory: phenix-1255-sw
+        run: |
+          {
+            echo "### Firmware memory usage"
+            echo '```'
+            grep -A4 "Memory region" build-firmware.log | grep -v "default"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ github.sha }}
+          path: |
+            phenix-1255-sw/build/firmware/zephyr/zephyr.bin
+            phenix-1255-sw/build/firmware/zephyr/zephyr.elf
+            phenix-1255-sw/build/firmware/zephyr/zephyr.map
+          retention-days: 30
+          if-no-files-found: error
+
+  soapy:
+    name: SoapySDR module (Linux)
+    if: github.event_name == 'push' || github.head_ref == 'develop'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libsoapysdr-dev soapysdr-tools \
+            cmake g++ pkg-config libusb-1.0-0-dev
+
+      - name: Configure
+        run: cmake -S soapy -B build/soapy -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
+
+      # Without libusb the module silently drops the HS USB transport
+      - name: Check USB support
+        run: grep -q "LIBUSB_FOUND:INTERNAL=1" build/soapy/CMakeCache.txt
+
+      - name: Build
+        run: cmake --build build/soapy -j
+
+      - name: Check that SoapySDR loads the module
+        run: |
+          SOAPY_SDR_PLUGIN_PATH="$PWD/build/soapy" SoapySDRUtil --info | tee soapy-info.txt
+          grep -q "Available factories.*phenix-1255" soapy-info.txt
+
+      - name: Check the protocol test client
+        run: python3 -m py_compile tools/phx_client.py

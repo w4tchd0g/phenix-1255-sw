@@ -11,6 +11,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/w4tchd0g/phenix-1255-sw/actions/workflows/build.yml"><img src="https://github.com/w4tchd0g/phenix-1255-sw/actions/workflows/build.yml/badge.svg?branch=develop" alt="Build status"></a>
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT">
   <img src="https://img.shields.io/badge/Zephyr-v4.5.0--rc3-6e40c9" alt="Zephyr v4.5.0-rc3">
   <img src="https://img.shields.io/badge/hosts-Linux%20%7C%20macOS-555" alt="Hosts: Linux and macOS">

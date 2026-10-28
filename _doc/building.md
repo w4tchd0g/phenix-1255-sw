@@ -163,3 +163,21 @@ SoapySDRUtil --probe="driver=phenix-1255"
 Device arguments, discovery and USB access rights:
 [soapy.md](../soapy/_doc/soapy.md). Test programs:
 [tests.md](../soapy/tests/_doc/tests.md).
+
+## Continuous integration
+
+The GitHub Actions workflow
+[`.github/workflows/build.yml`](../.github/workflows/build.yml) runs on every
+push to `develop` and on pull requests from `develop` to `main`:
+
+| Job | Runner | Checks |
+|---|---|---|
+| Firmware | Ubuntu | Pristine build for `frdm_mcxn947/mcxn947/cpu0` with `CONFIG_COMPILER_WARNINGS_AS_ERRORS=y`; memory report in the job summary |
+| SoapySDR module | Ubuntu | Build with `CMAKE_COMPILE_WARNING_AS_ERROR=ON` and USB support, `SoapySDRUtil --info` must list the `phenix-1255` factory; syntax check of `tools/phx_client.py` |
+
+Compiler warnings fail the build. The firmware (`zephyr.bin`, `zephyr.elf`,
+`zephyr.map`) is kept as a workflow artifact for 30 days and is not
+published as a release. The hardware tests in [testing.md](testing.md) are
+not part of the workflow. The workflow builds on Linux only; macOS builds
+must be checked locally before pushing (see the commands above).
+

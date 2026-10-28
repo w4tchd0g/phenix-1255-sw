@@ -56,7 +56,11 @@ On Linux, USB access for normal users needs the udev rule
 it the device is listed as "no access".
 
 Builds must stay free of warnings on Linux and macOS. All build output goes to
-`build/` (ignored by git).
+`build/` (ignored by git). GitHub Actions (`.github/workflows/build.yml`)
+builds both on Linux with warnings as errors on pushes to `develop` and pull
+requests from `develop` to `main`
+([building.md](_doc/building.md#continuous-integration)); macOS builds of
+host-side changes must be checked locally.
 
 ## Test
 
