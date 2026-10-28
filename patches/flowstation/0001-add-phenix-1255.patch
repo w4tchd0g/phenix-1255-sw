@@ -1,0 +1,70 @@
+diff --git a/crates/tetra-entities/src/phy/components/soapy_settings.rs b/crates/tetra-entities/src/phy/components/soapy_settings.rs
+index 276e88b..c4367ab 100644
+--- a/crates/tetra-entities/src/phy/components/soapy_settings.rs
++++ b/crates/tetra-entities/src/phy/components/soapy_settings.rs
+@@ -19,6 +19,7 @@ pub enum SupportedDevice {
+     LimeSdr(LimeSdrModel),
+     SXceiver,
+     MuCell,
++    Phenix1255,
+     PlutoSdr,
+     Usrp(UsrpModel),
+ }
+@@ -55,6 +56,7 @@ impl SupportedDevice {
+ 
+             ("sx", _) => Some(Self::SXceiver),
+             ("mucell", _) => Some(Self::MuCell),
++            ("phenix-1255", _) => Some(Self::Phenix1255),
+ 
+             ("PlutoSDR", _) => Some(Self::PlutoSdr),
+ 
+@@ -170,6 +172,8 @@ impl SdrSettings {
+ 
+             SupportedDevice::MuCell => Self::settings_mucell(mode, cfg.fs),
+ 
++            SupportedDevice::Phenix1255 => Self::settings_phenix1255(mode, cfg.fs),
++
+             SupportedDevice::PlutoSdr => Self::settings_pluto(mode),
+ 
+             SupportedDevice::Usrp(model) => Self::settings_usrp(mode, model),
+@@ -298,6 +302,27 @@ impl SdrSettings {
+         }
+     }
+ 
++    fn settings_phenix1255(mode: StackMode, fs_override: Option<f64>) -> Self {
++        // SX1255 on an NXP FRDM-MCXN947 with HS USB or Ethernet
++        // (Phenix-1255 SoapySDR module, driver "phenix-1255").
++        // Supported sample rates: 600, 300, 150, 75, 50 and 25 kHz.
++        // The module ignores stream arguments such as "period" and provides
++        // timestamps for every RX packet and exact timed TX.
++        // Gains as for the µCell, which uses the same transceiver.
++        Self {
++            name: "Phenix-1255".to_string(),
++            fs: fs_override.unwrap_or(600e3),
++
++            rx_ant: Some("RX".to_string()),
++            tx_ant: Some("TX".to_string()),
++
++            rx_gain: vec![("LNA".to_string(), 42.0), ("PGA".to_string(), 16.0)],
++            tx_gain: vec![("DAC".to_string(), 9.0), ("MIXER".to_string(), 30.0)],
++
++            ..Self::default(mode)
++        }
++    }
++
+     fn settings_usrp(mode: StackMode, model: UsrpModel) -> Self {
+         Self {
+             name: match model {
+diff --git a/example_config/config.toml b/example_config/config.toml
+index c525b2b..5778b8e 100644
+--- a/example_config/config.toml
++++ b/example_config/config.toml
+@@ -84,6 +84,8 @@ rx_freq = 433025000
+ # If not specified, the first compatible device found is selected automatically.
+ # device = "driver=plutosdr,uri=ip:192.168.42.42"
+ # device = "driver=lime,serial=123456789"
++# Phenix-1255 on Ethernet (on HS USB it is found automatically):
++# device = "driver=phenix-1255,addr=192.168.2.10"
+ 
+ # Optional antenna selection (overrides device defaults)
+ # rx_antenna = "LNAW"

@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Phenix-1255 contributors
+#
+# Firmware and common headers: Zephyr/Linux kernel style.
+# The SoapySDR module overrides this in soapy/.clang-format.
+
+BasedOnStyle: LLVM
+IndentWidth: 8
+TabWidth: 8
+UseTab: ForContinuationAndIndentation
+ColumnLimit: 100
+BreakBeforeBraces: Linux
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Never
+AllowShortCaseLabelsOnASingleLine: false
+AlignAfterOpenBracket: Align
+IndentCaseLabels: false
+SortIncludes: Never
+ForEachMacros:
+  - SYS_SLIST_FOR_EACH_NODE
+  - SYS_SLIST_FOR_EACH_CONTAINER
+  - SYS_DLIST_FOR_EACH_NODE
+  - SYS_DLIST_FOR_EACH_CONTAINER

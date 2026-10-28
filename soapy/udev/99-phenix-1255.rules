@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Phenix-1255 contributors
+#
+# Access to the Phenix-1255 HS USB interface for normal users.
+#
+# 1209:000a is a pid.codes test PID: it is shared by all devices used for
+# private testing and must be replaced by an own PID for distributed devices
+# (see firmware/src/usb/_doc/usb.md). This rule grants access to any device
+# with this ID.
+#
+# Install: copy to /etc/udev/rules.d/, then
+#   sudo udevadm control --reload-rules && sudo udevadm trigger
+
+SUBSYSTEM=="usb", ATTRS{idVendor}=="1209", ATTRS{idProduct}=="000a", MODE="0660", GROUP="plugdev", TAG+="uaccess"

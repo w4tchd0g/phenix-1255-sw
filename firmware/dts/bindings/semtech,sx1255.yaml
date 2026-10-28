@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Phenix-1255 contributors
+
+description: |
+  Semtech SX1255 RF transceiver, SPI configuration interface.
+
+  The I/Q sample interface (CK_OUT, DIO2/WS, I_OUT, I_IN) is connected to a
+  SAI peripheral and described separately.
+
+compatible: "semtech,sx1255"
+
+include: spi-device.yaml
+
+properties:
+  clock-frequency:
+    type: int
+    required: true
+    description: Reference oscillator frequency in Hz.
+
+  reset-gpios:
+    type: phandle-array
+    required: true
+    description: |
+      RESET pin. Released (high impedance) during normal operation,
+      driven high for at least 100 us to reset the chip.
+
+  dio0-gpios:
+    type: phandle-array
+    description: DIO0 input.
+
+  dio1-gpios:
+    type: phandle-array
+    description: DIO1 input.
+
+  dio3-gpios:
+    type: phandle-array
+    description: DIO3 input.

@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Phenix-1255 contributors
+#
+# West manifest for the Phenix-1255 firmware.
+#
+# Zephyr is pinned to an exact upstream commit so that every build uses
+# the same kernel, drivers and HAL. Only the modules required for the
+# FRDM-MCXN947 are fetched.
+#
+# v4.5.0-rc3 is required at least: earlier versions of the ENET-QOS driver
+# accept only one TX frame at a time and drop frames sent while the
+# transmitter is busy, which loses sample and control packets.
+
+manifest:
+  self:
+    path: phenix-1255-sw
+
+  remotes:
+    - name: zephyrproject-rtos
+      url-base: https://github.com/zephyrproject-rtos
+
+  projects:
+    - name: zephyr
+      remote: zephyrproject-rtos
+      # v4.5.0-rc3
+      revision: 76280bce2a050376d57e14240687b5c283dea0e7
+      import:
+        name-allowlist:
+          - cmsis
+          - cmsis_6
+          - hal_nxp

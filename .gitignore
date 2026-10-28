@@ -1,0 +1,34 @@
+# Build output
+build/
+build-*/
+twister-out*/
+
+# Test output (redirected logs can grow very large)
+*.log
+
+# Leftovers from applying patches
+*.orig
+*.rej
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Editors and IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Local AI assistant settings (CLAUDE.md is tracked)
+.claude/settings.local.json
+
+# Tooling caches
+.cache/
+compile_commands.json
+
+# macOS
+.DS_Store
+._*
