@@ -34,6 +34,10 @@ TETRA base station software such as
 [TETRA-Bluestation](https://github.com/MidnightBlueLabs/tetra-bluestation)
 and [FlowStation](https://github.com/razvanzeces/flowstation).
 
+Phenix-1255 is a joint project: the [phenix-1255-hw](https://github.com/labdvm/Phenix-1255-HW) board was
+developed by **Z32IT**, the firmware and host software are in this
+repository.
+
 ### Difference to a Raspberry Pi HAT
 
 SX1255 boards are often built as a HAT for a Raspberry Pi, where Linux on the
@@ -53,9 +57,9 @@ The host still runs the TETRA stack; Phenix-1255 replaces the HAT and its
 timing-critical driver, not the base station software.
 
 > [!NOTE]
-> **Status:** firmware 0.1.0-dev. The target hardware is the phenix-1255-hw
-> board on the FRDM-MCXN947 (SX1255, status LEDs, PA enable MOSFET, OLED
-> display and rotary encoder). The first tests were made with a µCell board
+> **Status:** firmware 0.1.0-dev. The target hardware is the
+> [phenix-1255-hw](https://github.com/labdvm/Phenix-1255-HW) board on the FRDM-MCXN947 (SX1255, status LEDs, PA
+> enable MOSFET, OLED display and rotary encoder). The first tests were made with a µCell board
 > wired to the FRDM-MCXN947: streaming over HS USB and Ethernet, the front
 > panel display and over-the-air operation with FlowStation work. A µCell
 > board or another SX1255 board built the same way is therefore usable as
@@ -133,7 +137,8 @@ Linux or macOS host. The linked documents contain the details.
 
 ### 1. Hardware
 
-- NXP FRDM-MCXN947 with the phenix-1255-hw board, or a µCell or compatible
+- NXP FRDM-MCXN947 with the [phenix-1255-hw](https://github.com/labdvm/Phenix-1255-HW) board (schematic, Gerber
+  files and BOM in its repository), or a µCell or compatible
   SX1255 board wired as listed in
   [hardware.md](_doc/hardware.md#pin-assignment) (reduced feature set, see
   [hardware.md](_doc/hardware.md#µcell-and-compatible-boards)).
@@ -375,6 +380,9 @@ code.
 | Stations | [Patches for TETRA-Bluestation and FlowStation](patches/_doc/patches.md) |
 
 ## Acknowledgements
+
+The phenix-1255-hw board was developed by Z32IT
+([Phenix-1255-HW](https://github.com/labdvm/Phenix-1255-HW)).
 
 The SX1255 register configuration follows
 [SoapySX](https://github.com/tejeez/sxxcvr) (SXceiver) and

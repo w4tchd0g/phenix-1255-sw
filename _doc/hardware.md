@@ -11,6 +11,10 @@ to an NXP FRDM-MCXN947. A µCell board or another SX1255 board built the same
 way can be used instead with a reduced feature set, see
 [µCell and compatible boards](#µcell-and-compatible-boards).
 
+phenix-1255-hw was developed by Z32IT as part of the joint Phenix-1255
+project. Schematic, board images, Gerber files and BOM are in the hardware
+repository [Phenix-1255-HW](https://github.com/labdvm/Phenix-1255-HW).
+
 | FRDM-MCXN947 connector | Use |
 |---|---|
 | J17 (MCU-Link) | Flashing, debug, console |

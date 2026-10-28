@@ -5,10 +5,11 @@ details live in the `_doc/` folders and are linked below.
 
 ## Project
 
-Phenix-1255: SX1255 SDR transceiver (38.4 MHz TCXO) on the NXP FRDM-MCXN947,
-target hardware is the phenix-1255-hw board (first tests ran on a µCell
-board; µCell and compatible SX1255 boards work with a reduced feature set,
-see [hardware.md](_doc/hardware.md#µcell-and-compatible-boards)).
+Phenix-1255: SX1255 SDR transceiver (38.4 MHz TCXO) on the NXP FRDM-MCXN947.
+Target hardware is the phenix-1255-hw board (schematic, Gerber, BOM:
+[Phenix-1255-HW](https://github.com/labdvm/Phenix-1255-HW)). The first tests
+ran on a µCell board; µCell and compatible SX1255 boards work with a reduced
+feature set, see [hardware.md](_doc/hardware.md#µcell-and-compatible-boards).
 Zephyr firmware streams timestamped I/Q samples over HS USB or Ethernet
 (selected by the `COMM_SEL` switch at boot); a SoapySDR module
 (`driver=phenix-1255`) serves TETRA base station software
@@ -94,6 +95,8 @@ build/soapy/phx_loopback_test   "driver=phenix-1255" all 20 5          # transmi
 - **Public repository:** no personal data, user names, home paths, private IP
   addresses, device serial numbers or local tool paths in code, docs or
   patches. Example addresses use `192.168.2.x` and `phenix-1255.local`.
+  Exception: the credit for the hardware developer (Z32IT) in README and
+  `_doc/hardware.md`.
 - **Linux and macOS are equal targets.** Every host-side change (`soapy/`,
   `tools/`, build files) must build and work on both; guard platform-specific
   APIs with feature macros (e.g. `SO_NOSIGPIPE` / `MSG_NOSIGNAL` in
