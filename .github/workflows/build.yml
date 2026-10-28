@@ -32,12 +32,12 @@ jobs:
     steps:
       # west.yml places the manifest repository at <workspace>/phenix-1255-sw
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: phenix-1255-sw
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -46,10 +46,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ninja-build gperf ccache \
             device-tree-compiler
-          pip install west
+
+      # west packages pip refuses to install outside a virtual environment
+      - name: Create Python environment
+        run: |
+          python -m venv .venv
+          echo "VIRTUAL_ENV=$PWD/.venv" >> "$GITHUB_ENV"
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+          .venv/bin/pip install west
 
       - name: Cache Zephyr and modules
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             zephyr
@@ -65,7 +72,7 @@ jobs:
       # The SDK version follows the Zephyr revision pinned in west.yml
       - name: Cache Zephyr SDK
         id: sdk-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: zephyr-sdk
           key: zephyr-sdk-${{ runner.os }}-${{ hashFiles('zephyr/SDK_VERSION') }}
@@ -95,7 +102,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload firmware
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: firmware-${{ github.sha }}
           path: |
@@ -111,7 +118,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install packages
         run: |
