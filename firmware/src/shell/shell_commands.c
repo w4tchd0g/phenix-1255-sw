@@ -234,6 +234,7 @@ static int cmd_display_status(const struct shell *sh, size_t argc, char **argv)
 		    info.dimmed ? " (dimmed)" : "");
 	shell_print(sh, "dim after:   %u s", cfg.dim_timeout_s);
 	shell_print(sh, "auto pages:  %s", cfg.auto_pages ? "on" : "off");
+	shell_print(sh, "encoder:     %s", cfg.encoder_reversed ? "reversed" : "normal");
 
 	return 0;
 }

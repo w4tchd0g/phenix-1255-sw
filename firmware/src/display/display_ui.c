@@ -70,6 +70,7 @@ LOG_MODULE_REGISTER(display_ui, LOG_LEVEL_INF);
 /* Start screen: phoenix at the left of the blue zone, text to its right */
 #define SPLASH_LOGO_X   4
 #define SPLASH_TEXT_GAP 5
+#define SPLASH_TEXT_X   (SPLASH_LOGO_X + splash_phoenix.width + SPLASH_TEXT_GAP)
 
 static const struct device *const disp = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
 
@@ -89,6 +90,7 @@ enum screen {
 	SCREEN_SPLASH,
 	SCREEN_PAGES,
 	SCREEN_MENU,
+	SCREEN_ABOUT,
 	SCREEN_CONFIRM,
 	SCREEN_MESSAGE,
 	SCREEN_TEST,
@@ -96,7 +98,8 @@ enum screen {
 
 static const char *const screen_names[] = {
 	[SCREEN_SPLASH] = "splash", [SCREEN_PAGES] = "pages",     [SCREEN_MENU] = "menu",
-	[SCREEN_CONFIRM] = "confirm", [SCREEN_MESSAGE] = "message", [SCREEN_TEST] = "test",
+	[SCREEN_ABOUT] = "about",   [SCREEN_CONFIRM] = "confirm", [SCREEN_MESSAGE] = "message",
+	[SCREEN_TEST] = "test",
 };
 
 enum page {
@@ -116,11 +119,13 @@ static const char *const page_titles[PAGE_COUNT] = {
 enum item {
 	ITEM_DISPLAY,
 	ITEM_NETWORK,
+	ITEM_ABOUT,
 	ITEM_REBOOT,
 	ITEM_FACTORY_RESET,
 	ITEM_CONTRAST,
 	ITEM_DIM,
 	ITEM_AUTO_PAGES,
+	ITEM_ENCODER_DIR,
 	ITEM_NET_MODE,
 	ITEM_NET_IP,
 	ITEM_NET_MASK,
@@ -132,9 +137,11 @@ enum item {
 
 static const char *const item_labels[] = {
 	[ITEM_DISPLAY] = "Display",     [ITEM_NETWORK] = "Network",
-	[ITEM_REBOOT] = "Reboot",       [ITEM_FACTORY_RESET] = "Factory reset",
+	[ITEM_ABOUT] = "About",         [ITEM_REBOOT] = "Reboot",
+	[ITEM_FACTORY_RESET] = "Factory reset",
 	[ITEM_CONTRAST] = "Brightness", [ITEM_DIM] = "Dim after",
-	[ITEM_AUTO_PAGES] = "Auto pages", [ITEM_NET_MODE] = "Mode",
+	[ITEM_AUTO_PAGES] = "Auto pages", [ITEM_ENCODER_DIR] = "Encoder dir",
+	[ITEM_NET_MODE] = "Mode",
 	[ITEM_NET_IP] = "IP",           [ITEM_NET_MASK] = "Mask",
 	[ITEM_NET_GW] = "GW",           [ITEM_NET_DNS] = "DNS",
 	[ITEM_NET_SAVE] = "Save+reboot", [ITEM_BACK] = "Back",
@@ -146,9 +153,10 @@ enum menu_id {
 	MENU_NETWORK,
 };
 
-static const uint8_t main_items[] = {ITEM_DISPLAY, ITEM_NETWORK, ITEM_REBOOT, ITEM_FACTORY_RESET,
-				     ITEM_BACK};
-static const uint8_t display_items[] = {ITEM_CONTRAST, ITEM_DIM, ITEM_AUTO_PAGES, ITEM_BACK};
+static const uint8_t main_items[] = {ITEM_DISPLAY, ITEM_NETWORK,       ITEM_ABOUT,
+				     ITEM_REBOOT,  ITEM_FACTORY_RESET, ITEM_BACK};
+static const uint8_t display_items[] = {ITEM_CONTRAST, ITEM_DIM, ITEM_AUTO_PAGES, ITEM_ENCODER_DIR,
+					ITEM_BACK};
 static const uint8_t network_items[] = {ITEM_NET_MODE, ITEM_NET_IP,  ITEM_NET_MASK, ITEM_NET_GW,
 					ITEM_NET_DNS,  ITEM_NET_SAVE, ITEM_BACK};
 
@@ -235,7 +243,9 @@ static void input_cb(struct input_event *evt, void *user_data)
 	ARG_UNUSED(user_data);
 
 	if (evt->type == INPUT_EV_REL && evt->code == INPUT_REL_WHEEL) {
-		uint8_t key = (evt->value > 0) ? DISPLAY_KEY_NEXT : DISPLAY_KEY_PREV;
+		/* Only the encoder is swapped: SW3 and injected keys have a fixed meaning */
+		bool next = (evt->value > 0) != ui.cfg.encoder_reversed;
+		uint8_t key = next ? DISPLAY_KEY_NEXT : DISPLAY_KEY_PREV;
 
 		for (int i = 0; i < abs(evt->value); i++) {
 			post_event(EV_KEY, key);
@@ -539,6 +549,7 @@ static void item_value(enum item item, char *buf, size_t len)
 	switch (item) {
 	case ITEM_DISPLAY:
 	case ITEM_NETWORK:
+	case ITEM_ABOUT:
 		snprintf(buf, len, ">");
 		break;
 	case ITEM_CONTRAST:
@@ -553,6 +564,9 @@ static void item_value(enum item item, char *buf, size_t len)
 		break;
 	case ITEM_AUTO_PAGES:
 		snprintf(buf, len, "%s", ui.cfg.auto_pages ? "on" : "off");
+		break;
+	case ITEM_ENCODER_DIR:
+		snprintf(buf, len, "%s", ui.cfg.encoder_reversed ? "reversed" : "normal");
 		break;
 	case ITEM_NET_MODE:
 		snprintf(buf, len, "%s", ui.net.dhcp ? "DHCP" : "static");
@@ -755,6 +769,9 @@ static void menu_select(enum item item)
 		ui.net_dirty = false;
 		open_menu(MENU_NETWORK, 0);
 		break;
+	case ITEM_ABOUT:
+		ui.screen = SCREEN_ABOUT;
+		break;
 	case ITEM_REBOOT:
 		open_confirm(CONFIRM_REBOOT);
 		break;
@@ -763,6 +780,10 @@ static void menu_select(enum item item)
 		break;
 	case ITEM_AUTO_PAGES:
 		ui.cfg.auto_pages = !ui.cfg.auto_pages;
+		ui.cfg_dirty = true;
+		break;
+	case ITEM_ENCODER_DIR:
+		ui.cfg.encoder_reversed = !ui.cfg.encoder_reversed;
 		ui.cfg_dirty = true;
 		break;
 	case ITEM_NET_MODE:
@@ -977,17 +998,31 @@ static void draw_message(const struct ui_status *s)
 	}
 }
 
-static void draw_splash(void)
+/* Shared by the start screen and About */
+static void draw_logo(void)
 {
 	const int yellow_height = ROW_BODY * 8;
-	const int text_x = SPLASH_LOGO_X + splash_phoenix.width + SPLASH_TEXT_GAP;
 
 	fb_bitmap(fb, (FB_WIDTH - splash_title.width) / 2,
 		  (yellow_height - splash_title.height) / 2, &splash_title);
 	fb_bitmap(fb, SPLASH_LOGO_X, yellow_height, &splash_phoenix);
-	fb_text(fb, ROW_BODY + 1, text_x, "SX1255 SDR", false);
-	fb_text(fb, ROW_BODY + 2, text_x, "FW " APP_VERSION_STRING, false);
-	fb_text(fb, ROW_BODY + 4, text_x, "Starting ...", false);
+	fb_text(fb, ROW_BODY + 1, SPLASH_TEXT_X, "SX1255 SDR", false);
+	fb_text(fb, ROW_BODY + 2, SPLASH_TEXT_X, "FW " APP_VERSION_STRING, false);
+}
+
+static void draw_splash(void)
+{
+	draw_logo();
+	fb_text(fb, ROW_BODY + 4, SPLASH_TEXT_X, "Starting ...", false);
+}
+
+static void draw_about(void)
+{
+	char hw[FB_COLS + 1];
+
+	draw_logo();
+	snprintf(hw, sizeof(hw), "HW %s", hw_id_name());
+	fb_text(fb, ROW_BODY + 3, SPLASH_TEXT_X, hw, false);
 }
 
 /* Marks the colour zones: yellow rows 0..15 lit, blue rows 16..63 framed */
@@ -1061,6 +1096,9 @@ static void render(void)
 	case SCREEN_MENU:
 		draw_menu(&s);
 		break;
+	case SCREEN_ABOUT:
+		draw_about();
+		break;
 	case SCREEN_CONFIRM:
 		draw_confirm(&s);
 		break;
@@ -1112,6 +1150,10 @@ static void handle_key(enum display_ui_key key, int64_t now)
 		break;
 	case SCREEN_MENU:
 		menu_key(key, now);
+		break;
+	case SCREEN_ABOUT:
+		/* The selection is unchanged, so this returns to the About entry */
+		ui.screen = SCREEN_MENU;
 		break;
 	case SCREEN_CONFIRM:
 		confirm_key(key);
@@ -1182,6 +1224,7 @@ static void update_timers(int64_t now)
 		}
 		break;
 	case SCREEN_MENU:
+	case SCREEN_ABOUT:
 	case SCREEN_CONFIRM:
 		if (now - ui.last_input >= MENU_TIMEOUT_MS) {
 			save_display_cfg(false);

@@ -23,7 +23,7 @@ LOG_MODULE_REGISTER(config_store, LOG_LEVEL_INF);
 #define SETTINGS_PARTITION_ID DT_PARTITION_ID(DT_CHOSEN(zephyr_settings_partition))
 
 #define NET_RECORD_VERSION     1
-#define DISPLAY_RECORD_VERSION 1
+#define DISPLAY_RECORD_VERSION 2
 
 /* On-flash layout of the network configuration, little endian */
 struct net_record {
@@ -43,7 +43,12 @@ struct display_record {
 	uint8_t contrast;
 	uint8_t dim_timeout_s[2];
 	uint8_t auto_pages;
+	uint8_t encoder_reversed;
 } __packed;
+
+/* Version 1 ended here; such a record keeps its settings after an update */
+#define DISPLAY_RECORD_V1      1
+#define DISPLAY_RECORD_V1_SIZE offsetof(struct display_record, encoder_reversed)
 
 /*
  * The MCXN flash driver (soc_flash_mcux.c, Zephyr v4.5.0-rc3) invalidates
@@ -71,6 +76,7 @@ static void display_defaults(struct phenix_display_cfg *cfg)
 	cfg->contrast = PHENIX_DEFAULT_DISPLAY_CONTRAST;
 	cfg->dim_timeout_s = PHENIX_DEFAULT_DISPLAY_DIM_S;
 	cfg->auto_pages = PHENIX_DEFAULT_DISPLAY_AUTO_PAGES;
+	cfg->encoder_reversed = PHENIX_DEFAULT_DISPLAY_ENCODER_REVERSED;
 }
 
 static bool display_cfg_valid(const struct phenix_display_cfg *cfg)
@@ -156,24 +162,31 @@ static int phenix_settings_set(const char *key, size_t len, settings_read_cb rea
 	}
 
 	if (settings_name_steq(key, "display", &next) && next == NULL) {
-		struct display_record rec;
+		struct display_record rec = {.encoder_reversed =
+						     PHENIX_DEFAULT_DISPLAY_ENCODER_REVERSED};
 		struct phenix_display_cfg cfg;
+		uint8_t version;
 		ssize_t rd;
 
-		if (len != sizeof(rec)) {
+		if (len == sizeof(rec)) {
+			version = DISPLAY_RECORD_VERSION;
+		} else if (len == DISPLAY_RECORD_V1_SIZE) {
+			version = DISPLAY_RECORD_V1;
+		} else {
 			LOG_WRN("Stored display settings have wrong size, ignored");
 			return 0;
 		}
 
-		rd = read_cb(cb_arg, &rec, sizeof(rec));
-		if (rd != sizeof(rec)) {
+		rd = read_cb(cb_arg, &rec, len);
+		if (rd != (ssize_t)len) {
 			return (rd < 0) ? (int)rd : -EIO;
 		}
 
 		cfg.contrast = rec.contrast;
 		cfg.dim_timeout_s = sys_get_le16(rec.dim_timeout_s);
 		cfg.auto_pages = rec.auto_pages != 0U;
-		if (rec.version != DISPLAY_RECORD_VERSION || !display_cfg_valid(&cfg)) {
+		cfg.encoder_reversed = rec.encoder_reversed != 0U;
+		if (rec.version != version || !display_cfg_valid(&cfg)) {
 			LOG_WRN("Stored display settings invalid, ignored");
 			return 0;
 		}
@@ -294,6 +307,7 @@ int config_store_set_display(const struct phenix_display_cfg *cfg)
 	rec.contrast = cfg->contrast;
 	sys_put_le16(cfg->dim_timeout_s, rec.dim_timeout_s);
 	rec.auto_pages = cfg->auto_pages ? 1U : 0U;
+	rec.encoder_reversed = cfg->encoder_reversed ? 1U : 0U;
 
 	k_mutex_lock(&cfg_lock, K_FOREVER);
 	ret = settings_save_one("phenix/display", &rec, sizeof(rec));

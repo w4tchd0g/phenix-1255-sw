@@ -103,6 +103,8 @@ Expected results:
 | Pages | `phenix display key next` six times, `phenix display dump` after each | All six pages, values match `stream status` / `phenix config show` |
 | Host state | Run `phx_soapy_test rx` | Link label highlighted, `RX` shown, counters running, test `PASS` |
 | Menu | Navigate with `phenix display key ...` or the encoder | See [display.md](../firmware/src/display/_doc/display.md#operation); leaving the Network menu discards changes |
+| Encoder direction | Set *Encoder dir* to `reversed`, turn the encoder, reboot | Turn directions swapped at once and after the reboot, SW3 still moves forward; `phenix display` reports `reversed` |
+| About | Select *About*, `phenix display dump`, any input | Logo, firmware version and hardware variant; returns to the *About* entry |
 | Dimming | Set *Dim after* to 1 min, wait | `phenix display` reports `(dimmed)`; the first input only wakes the display |
 | No display | Disconnect the display, reboot | `Display not ready, front panel disabled`, streaming unaffected |
 

@@ -9,17 +9,20 @@ partition at 0x1F0000 ([firmware.md](../../../_doc/firmware.md#flash)).
 | Key | Content | Users |
 |---|---|---|
 | `phenix/net` | DHCP on/off, static address, netmask, gateway, DNS, control port, sample port | [ethernet.md](../../ethernet/_doc/ethernet.md) (web interface, console), front panel menu |
-| `phenix/display` | Brightness, dim timeout, auto pages | [display.md](../../display/_doc/display.md) |
+| `phenix/display` | Brightness, dim timeout, auto pages, encoder direction | [display.md](../../display/_doc/display.md) |
 
 Factory defaults: DHCP on, fallback/static address 192.168.2.10/24, no
 gateway and DNS, control port 1255/TCP, sample port 1256/UDP; brightness 8,
-dim after 5 min, auto pages on.
+dim after 5 min, auto pages on, encoder direction normal.
 
 - Every network configuration is validated (`config_store_validate()`)
   before it is stored, and again when it is loaded; an invalid stored record
   is ignored and the defaults apply. The web interface, the console and the
   front panel menu use the same validation.
 - Network settings take effect after the next boot.
+- A display record of the previous format, without the encoder direction, is
+  read as well: its settings stay valid after a firmware update, and the
+  encoder direction starts as normal.
 - A factory reset (SW2 at boot, or the front panel menu) erases the whole
   partition ([board.md](../../board/_doc/board.md#factory-reset)).
 

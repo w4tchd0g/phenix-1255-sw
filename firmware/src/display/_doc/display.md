@@ -34,8 +34,8 @@ header into the yellow zone. `phenix display test` shows a pattern that
 marks both zones.
 
 **Encoder:** one input event per detent of an encoder with four steps per
-detent (`steps-per-period = <4>`). If turning clockwise moves backwards, add
-`invert-direction;` to the `encoder` node.
+detent (`steps-per-period = <4>`). If turning clockwise moves backwards, set
+*Encoder dir* to `reversed` in the Display menu.
 
 ## Screen layout
 
@@ -71,6 +71,9 @@ firmware does not wait for it; the status pages follow afterwards.
  +--------------------------+
 ```
 
+*About* in the menu shows the same screen with the hardware variant instead
+of the start-up note. Any input returns to the menu.
+
 The logo bitmaps in `splash_logo.c` are generated from
 `_doc/images/phenix-1255_logo_transparent.png` with
 [logo_to_c.py](../../../../tools/_doc/logo_to_c.md); the file is not edited
@@ -97,8 +100,8 @@ automatic change for 60 s.
 
 | Input | Status pages | Menu | While editing a value |
 |---|---|---|---|
-| Turn clockwise, SW3 | Next page | Next entry | Increase |
-| Turn counter-clockwise | Previous page | Previous entry | Decrease |
+| Turn clockwise (*Encoder dir* normal), SW3 | Next page | Next entry | Increase |
+| Turn counter-clockwise (*Encoder dir* normal) | Previous page | Previous entry | Decrease |
 | Short push | Open the menu | Select or edit the entry | Confirm (next octet for addresses) |
 | Long push (>= 0.8 s) | First page | Back | Stop editing |
 
@@ -111,11 +114,13 @@ MENU
  ├─ Display
  │   ├─ Brightness   1..10 (default 8)
  │   ├─ Dim after    never, 1, 2, 5 (default), 10, 30, 60 min
- │   └─ Auto pages   on (default) / off
+ │   ├─ Auto pages   on (default) / off
+ │   └─ Encoder dir  normal (default) / reversed
  ├─ Network
  │   ├─ Mode         DHCP / static
  │   ├─ IP, Mask, GW, DNS   static configuration (prefix length for the mask)
  │   └─ Save+reboot  validates, asks for confirmation, saves and reboots
+ ├─ About            logo, firmware version, hardware variant
  ├─ Reboot           asks for confirmation
  └─ Factory reset    asks twice, erases all settings and reboots
 ```
@@ -124,6 +129,8 @@ MENU
   Display menu (or when the menu times out). While a stream runs, saving is
   deferred until it stops, because flash writes lock interrupts and would
   interrupt the sample path.
+- *Encoder dir* swaps only the turn directions of the encoder; SW3 and the
+  console command `phenix display key` keep their meaning.
 - Network changes are kept in the menu until *Save+reboot*; leaving the
   menu discards them. The same validation as on the web interface and the
   console applies; a rejected configuration shows the reason. Turning the

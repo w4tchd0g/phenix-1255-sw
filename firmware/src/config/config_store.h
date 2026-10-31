@@ -25,11 +25,12 @@
 #define PHENIX_DEFAULT_SAMPLE_PORT PHX_DEFAULT_SAMPLE_PORT
 
 /* Front panel display */
-#define PHENIX_CONTRAST_MAX                10
-#define PHENIX_DIM_TIMEOUT_MAX_S           3600
-#define PHENIX_DEFAULT_DISPLAY_CONTRAST    8
-#define PHENIX_DEFAULT_DISPLAY_DIM_S       300
-#define PHENIX_DEFAULT_DISPLAY_AUTO_PAGES  true
+#define PHENIX_CONTRAST_MAX                     10
+#define PHENIX_DIM_TIMEOUT_MAX_S                3600
+#define PHENIX_DEFAULT_DISPLAY_CONTRAST         8
+#define PHENIX_DEFAULT_DISPLAY_DIM_S            300
+#define PHENIX_DEFAULT_DISPLAY_AUTO_PAGES       true
+#define PHENIX_DEFAULT_DISPLAY_ENCODER_REVERSED false
 
 /* TCP port of the web interface, not configurable */
 #define PHENIX_HTTP_PORT 80
@@ -57,6 +58,8 @@ struct phenix_display_cfg {
 	uint16_t dim_timeout_s;
 	/* Cycle through the status pages */
 	bool auto_pages;
+	/* Swap the encoder turn directions, for encoders wired the other way round */
+	bool encoder_reversed;
 };
 
 /**
