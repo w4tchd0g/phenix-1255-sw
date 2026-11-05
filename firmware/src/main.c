@@ -102,7 +102,9 @@ int main(void)
 	web_ui_start();
 	display_ui_start();
 
-	if (board_io_comm_mode() == BOARD_COMM_ETHERNET) {
+	/* Switching the link at runtime is not supported; it applies after a reboot */
+	if (config_store_boot_link() == PHENIX_LINK_ETHERNET) {
+		LOG_INF("Host link: Ethernet");
 		transport_eth_start(net_cfg.ctrl_port, net_cfg.sample_port);
 	} else {
 		LOG_INF("Host link: HS USB");

@@ -128,7 +128,14 @@ static void render_status(void)
 	out("<tr><td>Serial</td><td>%s</td></tr>", serial);
 	hw_id_bits_str(bits, sizeof(bits));
 	out("<tr><td>Hardware</td><td>%s (HW_ID %s)</td></tr>", hw_id_name(), bits);
-	out("<tr><td>Host link</td><td>%s</td></tr>", board_comm_mode_str(board_io_comm_mode()));
+	if (config_store_get_link() != config_store_boot_link()) {
+		out("<tr><td>Host link</td><td>%s (%s after reboot)</td></tr>",
+		    config_store_link_str(config_store_boot_link()),
+		    config_store_link_str(config_store_get_link()));
+	} else {
+		out("<tr><td>Host link</td><td>%s</td></tr>",
+		    config_store_link_str(config_store_boot_link()));
+	}
 	out("<tr><td>Host session</td><td>%s</td></tr>",
 	    control_session_active() ? "connected" : "none");
 	out("<tr><td>Address</td><td>%s (%s)</td></tr>", addr[0] ? addr : "-",
@@ -142,8 +149,11 @@ static void render_status(void)
 	out("</table>");
 }
 
-static void render_form(const struct phenix_net_cfg *cfg, const char *msg, bool error)
+static void render_form(const struct phenix_net_cfg *cfg, enum phenix_host_link link,
+			const char *msg, bool error)
 {
+	bool usb = (link == PHENIX_LINK_USB);
+
 	char ip[PHENIX_IPV4_STR_LEN], mask[PHENIX_IPV4_STR_LEN];
 	char gw[PHENIX_IPV4_STR_LEN], dns[PHENIX_IPV4_STR_LEN];
 
@@ -152,11 +162,17 @@ static void render_form(const struct phenix_net_cfg *cfg, const char *msg, bool 
 	config_store_format_ipv4(cfg->gateway, gw, sizeof(gw));
 	config_store_format_ipv4(cfg->dns, dns, sizeof(dns));
 
-	out("<h2>Network configuration</h2>");
+	out("<h2>Configuration</h2>");
 	if (msg != NULL) {
 		out("<p class=\"%s\">%s</p>", error ? "err" : "ok", msg);
 	}
 	out("<form method=\"post\" action=\"/config\">");
+	out("<label>Host link</label><select name=\"link\">"
+	    "<option value=\"usb\"%s>HS USB</option>"
+	    "<option value=\"ethernet\"%s>Ethernet</option></select><br>",
+	    usb ? " selected" : "", usb ? "" : " selected");
+	out("<p><small>Control channel and sample stream; the web interface is "
+	    "available with both.</small></p>");
 	out("<label>DHCP</label><select name=\"dhcp\">"
 	    "<option value=\"on\"%s>on</option><option value=\"off\"%s>off</option>"
 	    "</select><br>",
@@ -174,12 +190,13 @@ static void render_form(const struct phenix_net_cfg *cfg, const char *msg, bool 
 	out("<p><input type=\"submit\" value=\"Save and reboot\"></p></form>");
 }
 
-static void render_page(const struct phenix_net_cfg *cfg, const char *msg, bool error)
+static void render_page(const struct phenix_net_cfg *cfg, enum phenix_host_link link,
+			const char *msg, bool error)
 {
 	page_len = 0;
 	out("%s", page_head);
 	render_status();
-	render_form(cfg, msg, error);
+	render_form(cfg, link, msg, error);
 	out("%s", page_tail);
 }
 
@@ -195,13 +212,14 @@ static void render_json(void)
 
 	page_len = 0;
 	out("{\"firmware\":\"%s\",\"serial\":\"%s\",\"hardware\":\"%s\",\"hw_id\":%d,"
-	    "\"host_link\":\"%s\","
+	    "\"host_link\":\"%s\",\"host_link_saved\":\"%s\","
 	    "\"session\":%s,\"address\":\"%s\",\"address_mode\":\"%s\","
 	    "\"sx1255_ready\":%s,\"streaming\":%s,\"tx_enabled\":%s,\"pa\":%s,"
 	    "\"sample_rate\":%u,\"counter\":%llu,\"tx_late\":%u,\"tx_early\":%u,"
 	    "\"fifo_errors\":%u,\"last_reset\":\"%s\"}\n",
 	    APP_VERSION_EXTENDED_STRING, serial, hw_id_name(), hw_id_get(),
-	    (board_io_comm_mode() == BOARD_COMM_USB) ? "usb" : "ethernet",
+	    (config_store_boot_link() == PHENIX_LINK_USB) ? "usb" : "ethernet",
+	    (config_store_get_link() == PHENIX_LINK_USB) ? "usb" : "ethernet",
 	    control_session_active() ? "true" : "false", addr, net_config_get_mode(),
 	    sx1255_is_ready() ? "true" : "false", st.running ? "true" : "false",
 	    st.tx_enabled ? "true" : "false", board_pa_is_enabled() ? "true" : "false",
@@ -245,9 +263,18 @@ static int parse_port(const char *s, uint16_t *port)
 }
 
 /* Apply one form field; returns an error text or NULL */
-static const char *apply_field(struct phenix_net_cfg *cfg, const char *key, const char *val)
+static const char *apply_field(struct phenix_net_cfg *cfg, enum phenix_host_link *link,
+			       const char *key, const char *val)
 {
-	if (strcmp(key, "dhcp") == 0) {
+	if (strcmp(key, "link") == 0) {
+		if (strcmp(val, "usb") == 0) {
+			*link = PHENIX_LINK_USB;
+		} else if (strcmp(val, "ethernet") == 0) {
+			*link = PHENIX_LINK_ETHERNET;
+		} else {
+			return "Invalid host link";
+		}
+	} else if (strcmp(key, "dhcp") == 0) {
 		if (strcmp(val, "on") == 0) {
 			cfg->dhcp = true;
 		} else if (strcmp(val, "off") == 0) {
@@ -284,7 +311,8 @@ static const char *apply_field(struct phenix_net_cfg *cfg, const char *key, cons
 	return NULL;
 }
 
-static const char *parse_form(char *body, struct phenix_net_cfg *cfg)
+static const char *parse_form(char *body, struct phenix_net_cfg *cfg,
+			      enum phenix_host_link *link)
 {
 	char *save = NULL;
 
@@ -300,7 +328,7 @@ static const char *parse_form(char *body, struct phenix_net_cfg *cfg)
 		url_decode(pair);
 		url_decode(eq + 1);
 
-		err = apply_field(cfg, pair, eq + 1);
+		err = apply_field(cfg, link, pair, eq + 1);
 		if (err != NULL) {
 			return err;
 		}
@@ -322,35 +350,44 @@ static K_WORK_DELAYABLE_DEFINE(reboot_work, reboot_work_handler);
 static void handle_post_config(int sock, char *body)
 {
 	struct phenix_net_cfg cfg;
+	enum phenix_host_link link = config_store_get_link();
 	const char *err;
-	char msg[160];
+	char msg[200];
+	int ret;
 
 	config_store_get_net(&cfg);
-	err = parse_form(body, &cfg);
+	err = parse_form(body, &cfg, &link);
 	if (err != NULL) {
 		snprintf(msg, sizeof(msg), "Not saved: %s.", err);
-		render_page(&cfg, msg, true);
+		render_page(&cfg, link, msg, true);
 		send_response(sock, "400 Bad Request", "text/html; charset=utf-8");
 		return;
 	}
 
-	if (config_store_set_net(&cfg) < 0) {
-		render_page(&cfg, "Saving failed.", true);
+	ret = config_store_set_net(&cfg);
+	/* Avoids a flash write when only the network settings changed */
+	if (ret == 0 && link != config_store_get_link()) {
+		ret = config_store_set_link(link);
+	}
+	if (ret < 0) {
+		render_page(&cfg, link, "Saving failed.", true);
 		send_response(sock, "500 Internal Server Error", "text/html; charset=utf-8");
 		return;
 	}
 
 	if (cfg.dhcp) {
 		snprintf(msg, sizeof(msg),
-			 "Saved. Rebooting with DHCP; reconnect via "
+			 "Saved. Rebooting with DHCP and host link %s; reconnect via "
 			 "<a href=\"http://%s.local/\">%s.local</a>.",
-			 PHX_MDNS_HOSTNAME, PHX_MDNS_HOSTNAME);
+			 config_store_link_str(link), PHX_MDNS_HOSTNAME, PHX_MDNS_HOSTNAME);
 	} else {
 		char ip[PHENIX_IPV4_STR_LEN];
 
 		config_store_format_ipv4(cfg.ip, ip, sizeof(ip));
 		snprintf(msg, sizeof(msg),
-			 "Saved. Rebooting; reconnect via <a href=\"http://%s/\">%s</a>.", ip, ip);
+			 "Saved. Rebooting with host link %s; reconnect via "
+			 "<a href=\"http://%s/\">%s</a>.",
+			 config_store_link_str(link), ip, ip);
 	}
 
 	page_len = 0;
@@ -432,7 +469,7 @@ static void handle_client(int sock)
 
 	if (strncmp(req, "GET / ", 6) == 0 || strncmp(req, "GET /index.html ", 16) == 0) {
 		config_store_get_net(&cfg);
-		render_page(&cfg, NULL, false);
+		render_page(&cfg, config_store_get_link(), NULL, false);
 		send_response(sock, "200 OK", "text/html; charset=utf-8");
 	} else if (strncmp(req, "GET /status.json ", 17) == 0) {
 		render_json();

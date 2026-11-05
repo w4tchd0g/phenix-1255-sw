@@ -3,11 +3,10 @@
 `display_ui.c` (pages, menu, input) and `display_fb.c` (frame buffer, font,
 bitmaps) run the front panel; `splash_logo.c` holds the logo of the start
 screen. A 0.96" 128x64 OLED (SSD1306, I2C) shows the device
-state on six status pages and offers a settings menu. It is operated with a
-rotary encoder with push button; both are part of phenix-1255-hw. SW3 on the
-FRDM-MCXN947 also steps through the pages, which is useful on a µCell or
-compatible board setup without encoder. The firmware runs unchanged without a
-display.
+state on six status pages and offers a settings menu. It is operated with
+three buttons, Left, OK and Right; display and buttons are part of
+phenix-1255-hw and can be wired to a µCell or compatible board setup as well.
+The firmware runs unchanged without a display.
 
 ## Hardware
 
@@ -15,10 +14,9 @@ display.
 |---|---|---|---|
 | OLED SDA | P1_0 | LPI2C3 SDA (FC3_P0) | mikroBUS I2C pins, 400 kHz |
 | OLED SCL | P1_1 | LPI2C3 SCL (FC3_P1) | Pull-ups on the display module |
-| Encoder A | P1_19 | GPIO input, internal pull-up | `gpio-qdec` |
-| Encoder B | P1_18 | GPIO input, internal pull-up | `gpio-qdec` |
-| Encoder push button | P0_11 | GPIO input, pull-up, active low | `gpio-keys`, `INPUT_KEY_ENTER` |
-| SW3 | P0_6 | GPIO input, pull-up, active low | `gpio-keys`, `INPUT_KEY_DOWN`; ISP mode select only during reset |
+| BTN0 Left | P2_0 (J3-1) | GPIO input, internal pull-down, active high | `gpio-keys`, `INPUT_KEY_LEFT` |
+| BTN1 OK | P1_22 (J3-3) | GPIO input, internal pull-down, active high | `gpio-keys`, `INPUT_KEY_ENTER` |
+| BTN2 Right | P4_12 (J4-1) | GPIO input, internal pull-down, active high | `gpio-keys`, `INPUT_KEY_RIGHT` |
 
 **I2C address:** display modules print the address in 8-bit form, `0x78`
 (`0x79` read) or `0x7A` (`0x7B` read), selected by a resistor on the back.
@@ -33,9 +31,10 @@ are blue, with a narrow visible gap between them. The firmware puts the
 header into the yellow zone. `phenix display test` shows a pattern that
 marks both zones.
 
-**Encoder:** one input event per detent of an encoder with four steps per
-detent (`steps-per-period = <4>`). If turning clockwise moves backwards, set
-*Encoder dir* to `reversed` in the Display menu.
+**Buttons:** the buttons switch the pins to +3V3; the internal pull-downs
+keep them low while released. `gpio-keys` debounces them (30 ms). P4_12 is
+also the OPAMP0 input on the FRDM-MCXN947; `opamp0` is disabled in the
+overlay so that the pin stays a GPIO.
 
 ## Screen layout
 
@@ -84,11 +83,11 @@ by hand.
 | Page | Content |
 |---|---|
 | STATUS | RX and TX frequency (exact synthesizer value), sample rate, PLL lock, host session, late TX packets and dropped RX samples |
-| NETWORK | Current IP address and its source, MAC address, control and sample port, host link selected by `COMM_SEL` |
+| NETWORK | Current IP address and its source, MAC address, control and sample port, host link in use (`Link USB, reboot: ETH` while a changed link waits for the reboot) |
 | RF | LNA, PGA, DAC and mixer gain, RX input, TX driver, PA, SX1255 state |
 | STREAM | Sample counter, RX/TX packet counters, late/early TX packets, SAI FIFO and frame sync errors |
 | SYSTEM | Firmware and Zephyr version, uptime, last reset cause, serial number |
-| HARDWARE | Hardware variant and HW_ID jumpers ([board.md](../../board/_doc/board.md#hardware-variant)), host link selected by `COMM_SEL` |
+| HARDWARE | Hardware variant and HW_ID jumpers ([board.md](../../board/_doc/board.md#hardware-variant)) |
 
 On unsupported hardware the front panel shows only a static HARDWARE ERROR
 screen ([board.md](../../board/_doc/board.md#hardware-variant)).
@@ -98,14 +97,20 @@ automatic change for 60 s.
 
 ## Operation
 
-| Input | Status pages | Menu | While editing a value |
-|---|---|---|---|
-| Turn clockwise (*Encoder dir* normal), SW3 | Next page | Next entry | Increase |
-| Turn counter-clockwise (*Encoder dir* normal) | Previous page | Previous entry | Decrease |
-| Short push | Open the menu | Select or edit the entry | Confirm (next octet for addresses) |
-| Long push (>= 0.8 s) | First page | Back | Stop editing |
+| Button | Status pages | Menu | While editing a value | Confirmation |
+|---|---|---|---|---|
+| Right | Next page | Next entry | Increase | Choose *Yes* |
+| Left | Previous page | Previous entry | Decrease | Choose *No* |
+| OK, short press | Open the menu | Select or edit the entry | Confirm (next octet for addresses) | Execute the choice |
+| OK, long press (>= 0.8 s) | First page | Back | Stop editing | Cancel |
 
-The menu closes after 60 s without input.
+- The long press acts as soon as 0.8 s are reached, while OK is still held;
+  releasing it afterwards does nothing.
+- Left and Right repeat while held: after 0.5 s every 100 ms. After 2 s an
+  address octet steps by 10.
+- In a confirmation, Left and Right choose the answer on their side instead
+  of toggling it, so a held button cannot end on *Yes*. *No* is preselected.
+- The menu closes after 60 s without input.
 
 ### Menu
 
@@ -114,12 +119,12 @@ MENU
  ├─ Display
  │   ├─ Brightness   1..10 (default 8)
  │   ├─ Dim after    never, 1, 2, 5 (default), 10, 30, 60 min
- │   ├─ Auto pages   on (default) / off
- │   └─ Encoder dir  normal (default) / reversed
+ │   └─ Auto pages   on (default) / off
  ├─ Network
  │   ├─ Mode         DHCP / static
  │   ├─ IP, Mask, GW, DNS   static configuration (prefix length for the mask)
  │   └─ Save+reboot  validates, asks for confirmation, saves and reboots
+ ├─ Host link        USB (default) / ETH: asks for confirmation, saves and reboots
  ├─ About            logo, firmware version, hardware variant
  ├─ Reboot           asks for confirmation
  └─ Factory reset    asks twice, erases all settings and reboots
@@ -129,14 +134,14 @@ MENU
   Display menu (or when the menu times out). While a stream runs, saving is
   deferred until it stops, because flash writes lock interrupts and would
   interrupt the sample path.
-- *Encoder dir* swaps only the turn directions of the encoder; SW3 and the
-  console command `phenix display key` keep their meaning.
 - Network changes are kept in the menu until *Save+reboot*; leaving the
   menu discards them. The same validation as on the web interface and the
-  console applies; a rejected configuration shows the reason. Turning the
-  encoder quickly steps address octets by 10.
-- Reboot and factory reset switch the PA off and close the host session
-  first, like a reboot from the web interface. The confirmation shows a
+  console applies; a rejected configuration shows the reason.
+- *Host link* shows the stored link and offers to switch to the other one.
+  The link is changed only with a reboot, because the transports are
+  started at boot ([config.md](../../config/_doc/config.md#host-link)).
+- Reboot, factory reset and the host link change switch the PA off and close
+  the host session first, like a reboot from the web interface. The confirmation shows a
   warning while a host session is open.
 
 ### Dimming
@@ -163,7 +168,9 @@ switched and when an error is signalled.
   without it the bus busy flag stays set after boot and the NXP HAL rejects
   every transfer, so the display stays dark and an I2C scan finds nothing.
 - Input callbacks run synchronously in the context of the reporting driver
-  (`CONFIG_INPUT_MODE_SYNCHRONOUS`) and only queue the event.
+  (`CONFIG_INPUT_MODE_SYNCHRONOUS`) and only queue the event. Auto repeat
+  and the long press use kernel timers, whose handlers also only queue
+  events.
 - Settings are stored as `phenix/display` in the settings partition, see
   [config.md](../../config/_doc/config.md).
 
@@ -172,6 +179,6 @@ switched and when an error is signalled.
 | Command | Purpose |
 |---|---|
 | `phenix display` | Display state and settings |
-| `phenix display key <prev\|next\|select\|back>` | Simulate an input |
+| `phenix display key <left\|right\|ok\|back>` | Simulate a button (`ok` short, `back` long press of OK; without repeat) |
 | `phenix display test [s]` | Colour zone test pattern (default 10 s) |
 | `phenix display dump` | Print the content last sent to the display |

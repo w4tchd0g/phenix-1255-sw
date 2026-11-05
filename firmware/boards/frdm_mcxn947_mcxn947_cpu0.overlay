@@ -48,8 +48,6 @@
 	zephyr,user {
 		/* Gate of the P-MOSFET switching VBAT3 to the SX1255 PA */
 		pa-en-gpios = <&gpio2 4 GPIO_ACTIVE_LOW>;
-		/* COMM_SEL switch: high (open) = HS USB, low = Ethernet */
-		comm-sel-gpios = <&gpio2 7 (GPIO_ACTIVE_HIGH | GPIO_PULL_UP)>;
 		/* SW2, held during boot = factory reset */
 		factory-reset-gpios = <&gpio0 23 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
 		/*
@@ -62,42 +60,35 @@
 	};
 
 	/*
-	 * Operator inputs for the display menu. SW3 (ISP mode select, only
-	 * sampled by the boot ROM) is free after boot and steps like one
-	 * encoder detent.
+	 * Front panel buttons, switched to +3V3; the internal pull-downs keep
+	 * open inputs low.
 	 */
 	phenix_keys {
 		compatible = "gpio-keys";
 
-		enc_button: enc_button {
-			gpios = <&gpio0 11 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+		btn_left: btn_left {
+			gpios = <&gpio2 0 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>;
+			zephyr,code = <INPUT_KEY_LEFT>;
+			label = "BTN0 Left (J3-1)";
+		};
+
+		btn_ok: btn_ok {
+			gpios = <&gpio1 22 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>;
 			zephyr,code = <INPUT_KEY_ENTER>;
-			label = "Rotary encoder push button";
+			label = "BTN1 OK (J3-3)";
 		};
 
-		sw3_button: sw3_button {
-			gpios = <&gpio0 6 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-			zephyr,code = <INPUT_KEY_DOWN>;
-			label = "User SW3";
+		btn_right: btn_right {
+			gpios = <&gpio4 12 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>;
+			zephyr,code = <INPUT_KEY_RIGHT>;
+			label = "BTN2 Right (J4-1)";
 		};
-	};
-
-	encoder: encoder {
-		compatible = "gpio-qdec";
-		/* A, B */
-		gpios = <&gpio1 19 (GPIO_ACTIVE_HIGH | GPIO_PULL_UP)>,
-			<&gpio1 18 (GPIO_ACTIVE_HIGH | GPIO_PULL_UP)>;
-		/* One event per detent of a 4-step-per-detent encoder */
-		steps-per-period = <4>;
-		zephyr,axis = <INPUT_REL_WHEEL>;
-		sample-time-us = <2000>;
-		idle-timeout-ms = <200>;
 	};
 };
 
 /*
- * SW2 is the boot-time factory reset input only (board_io.c); the board's
- * gpio-keys node would also report it as an input event.
+ * SW2 is the boot-time factory reset input only (board_io.c) and SW3 is
+ * not used; the board's gpio-keys node would report both as input events.
  */
 &{/gpio_keys} {
 	status = "disabled";
@@ -117,6 +108,19 @@
 
 &gpio1 {
 	interrupts = <19 3>, <20 3>;
+};
+
+&gpio2 {
+	interrupts = <21 3>, <22 3>;
+};
+
+&gpio4 {
+	interrupts = <25 3>, <26 3>;
+};
+
+/* P4_12 is BTN2; the board's pinctrl would mux it as OPAMP0 input */
+&opamp0 {
+	status = "disabled";
 };
 
 /* The touch slider is not used; CONFIG_INPUT would start its scan timer */

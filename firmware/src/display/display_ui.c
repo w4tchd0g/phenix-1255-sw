@@ -5,7 +5,6 @@
 
 #include <stdarg.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 #include <zephyr/kernel.h>
@@ -47,9 +46,12 @@ LOG_MODULE_REGISTER(display_ui, LOG_LEVEL_INF);
 /* Menus close after this time without input */
 #define MENU_TIMEOUT_MS 60000
 #define MESSAGE_MS      2500
+/* OK held this long means back; it fires while the button is still held */
 #define LONG_PRESS_MS   800
-/* Encoder detents closer than this step IP octets by 10 */
-#define FAST_TURN_MS    60
+/* Left/Right held: first repeat, repeat period, and steps of 10 for IP octets */
+#define REPEAT_DELAY_MS 500
+#define REPEAT_MS       100
+#define FAST_AFTER_MS   2000
 
 /* SSD1306 contrast per brightness level, and while dimmed */
 #define CONTRAST_STEP 25
@@ -82,6 +84,8 @@ enum ui_event_type {
 struct ui_event {
 	uint8_t type;
 	uint8_t arg;
+	/* Repeated step of a button held for FAST_AFTER_MS */
+	bool fast;
 };
 
 K_MSGQ_DEFINE(ui_events, sizeof(struct ui_event), 16, 1);
@@ -119,13 +123,13 @@ static const char *const page_titles[PAGE_COUNT] = {
 enum item {
 	ITEM_DISPLAY,
 	ITEM_NETWORK,
+	ITEM_HOST_LINK,
 	ITEM_ABOUT,
 	ITEM_REBOOT,
 	ITEM_FACTORY_RESET,
 	ITEM_CONTRAST,
 	ITEM_DIM,
 	ITEM_AUTO_PAGES,
-	ITEM_ENCODER_DIR,
 	ITEM_NET_MODE,
 	ITEM_NET_IP,
 	ITEM_NET_MASK,
@@ -137,10 +141,11 @@ enum item {
 
 static const char *const item_labels[] = {
 	[ITEM_DISPLAY] = "Display",     [ITEM_NETWORK] = "Network",
+	[ITEM_HOST_LINK] = "Host link",
 	[ITEM_ABOUT] = "About",         [ITEM_REBOOT] = "Reboot",
 	[ITEM_FACTORY_RESET] = "Factory reset",
 	[ITEM_CONTRAST] = "Brightness", [ITEM_DIM] = "Dim after",
-	[ITEM_AUTO_PAGES] = "Auto pages", [ITEM_ENCODER_DIR] = "Encoder dir",
+	[ITEM_AUTO_PAGES] = "Auto pages",
 	[ITEM_NET_MODE] = "Mode",
 	[ITEM_NET_IP] = "IP",           [ITEM_NET_MASK] = "Mask",
 	[ITEM_NET_GW] = "GW",           [ITEM_NET_DNS] = "DNS",
@@ -153,10 +158,9 @@ enum menu_id {
 	MENU_NETWORK,
 };
 
-static const uint8_t main_items[] = {ITEM_DISPLAY, ITEM_NETWORK,       ITEM_ABOUT,
+static const uint8_t main_items[] = {ITEM_DISPLAY, ITEM_NETWORK,       ITEM_HOST_LINK, ITEM_ABOUT,
 				     ITEM_REBOOT,  ITEM_FACTORY_RESET, ITEM_BACK};
-static const uint8_t display_items[] = {ITEM_CONTRAST, ITEM_DIM, ITEM_AUTO_PAGES, ITEM_ENCODER_DIR,
-					ITEM_BACK};
+static const uint8_t display_items[] = {ITEM_CONTRAST, ITEM_DIM, ITEM_AUTO_PAGES, ITEM_BACK};
 static const uint8_t network_items[] = {ITEM_NET_MODE, ITEM_NET_IP,  ITEM_NET_MASK, ITEM_NET_GW,
 					ITEM_NET_DNS,  ITEM_NET_SAVE, ITEM_BACK};
 
@@ -177,6 +181,7 @@ enum confirm {
 	CONFIRM_FACTORY_RESET,
 	CONFIRM_FACTORY_RESET_AGAIN,
 	CONFIRM_NET_SAVE,
+	CONFIRM_HOST_LINK,
 };
 
 static const uint16_t dim_options_s[] = {0, 60, 120, 300, 600, 1800, 3600};
@@ -207,7 +212,6 @@ static struct {
 	int msg_sel;
 	int64_t screen_until;
 	int64_t last_input;
-	int64_t last_adjust;
 	int64_t page_since;
 	int64_t manual_until;
 	bool dimmed;
@@ -224,44 +228,92 @@ static uint8_t fb_sent[FB_SIZE];
 static bool fb_sent_valid;
 static bool write_failed;
 
-static void post_event(uint8_t type, uint8_t arg)
+static void post_event(uint8_t type, uint8_t arg, bool fast)
 {
-	struct ui_event ev = {.type = type, .arg = arg};
+	struct ui_event ev = {.type = type, .arg = arg, .fast = fast};
 
 	/* Inputs beyond the queue depth are dropped, the operator repeats them */
 	(void)k_msgq_put(&ui_events, &ev, K_NO_WAIT);
 }
 
 /*
- * Runs in the context of the reporting driver (INPUT_MODE_SYNCHRONOUS):
- * the work queue for buttons, the sampling timer for the encoder.
+ * Button handling. input_cb runs in the context of the reporting driver
+ * (INPUT_MODE_SYNCHRONOUS, the gpio-keys debounce work); the timers expire
+ * in interrupt context. Both only post events.
  */
+static atomic_t repeat_key;
+static int64_t repeat_since;
+static atomic_t long_fired;
+
+static void repeat_expiry(struct k_timer *timer)
+{
+	ARG_UNUSED(timer);
+
+	post_event(EV_KEY, (uint8_t)atomic_get(&repeat_key),
+		   k_uptime_get() - repeat_since >= FAST_AFTER_MS);
+}
+
+K_TIMER_DEFINE(repeat_timer, repeat_expiry, NULL);
+
+static void long_press_expiry(struct k_timer *timer)
+{
+	ARG_UNUSED(timer);
+
+	atomic_set(&long_fired, 1);
+	post_event(EV_KEY, DISPLAY_KEY_BACK, false);
+}
+
+K_TIMER_DEFINE(long_press_timer, long_press_expiry, NULL);
+
+static void arrow_input(enum display_ui_key key, bool pressed)
+{
+	if (pressed) {
+		/* The last pressed arrow repeats */
+		k_timer_stop(&repeat_timer);
+		atomic_set(&repeat_key, key);
+		repeat_since = k_uptime_get();
+		post_event(EV_KEY, key, false);
+		k_timer_start(&repeat_timer, K_MSEC(REPEAT_DELAY_MS), K_MSEC(REPEAT_MS));
+	} else if (atomic_get(&repeat_key) == key) {
+		k_timer_stop(&repeat_timer);
+	}
+}
+
+static void ok_input(bool pressed)
+{
+	if (pressed) {
+		atomic_set(&long_fired, 0);
+		k_timer_start(&long_press_timer, K_MSEC(LONG_PRESS_MS), K_NO_WAIT);
+		return;
+	}
+
+	/* After k_timer_stop() the expiry has either run completely or not at all */
+	k_timer_stop(&long_press_timer);
+	if (!atomic_get(&long_fired)) {
+		post_event(EV_KEY, DISPLAY_KEY_OK, false);
+	}
+}
+
 static void input_cb(struct input_event *evt, void *user_data)
 {
-	static int64_t press_start;
-
 	ARG_UNUSED(user_data);
 
-	if (evt->type == INPUT_EV_REL && evt->code == INPUT_REL_WHEEL) {
-		/* Only the encoder is swapped: SW3 and injected keys have a fixed meaning */
-		bool next = (evt->value > 0) != ui.cfg.encoder_reversed;
-		uint8_t key = next ? DISPLAY_KEY_NEXT : DISPLAY_KEY_PREV;
+	if (evt->type != INPUT_EV_KEY) {
+		return;
+	}
 
-		for (int i = 0; i < abs(evt->value); i++) {
-			post_event(EV_KEY, key);
-		}
-	} else if (evt->type == INPUT_EV_KEY && evt->code == INPUT_KEY_DOWN) {
-		if (evt->value != 0) {
-			post_event(EV_KEY, DISPLAY_KEY_NEXT);
-		}
-	} else if (evt->type == INPUT_EV_KEY && evt->code == INPUT_KEY_ENTER) {
-		if (evt->value != 0) {
-			press_start = k_uptime_get();
-		} else {
-			post_event(EV_KEY, (k_uptime_get() - press_start >= LONG_PRESS_MS)
-						   ? DISPLAY_KEY_BACK
-						   : DISPLAY_KEY_SELECT);
-		}
+	switch (evt->code) {
+	case INPUT_KEY_LEFT:
+		arrow_input(DISPLAY_KEY_LEFT, evt->value != 0);
+		break;
+	case INPUT_KEY_RIGHT:
+		arrow_input(DISPLAY_KEY_RIGHT, evt->value != 0);
+		break;
+	case INPUT_KEY_ENTER:
+		ok_input(evt->value != 0);
+		break;
+	default:
+		break;
 	}
 }
 
@@ -269,12 +321,12 @@ INPUT_CALLBACK_DEFINE(NULL, input_cb, NULL);
 
 void display_ui_inject(enum display_ui_key key)
 {
-	post_event(EV_KEY, (uint8_t)key);
+	post_event(EV_KEY, (uint8_t)key, false);
 }
 
 void display_ui_test_pattern(int seconds)
 {
-	post_event(EV_TEST, (uint8_t)CLAMP(seconds, 1, 60));
+	post_event(EV_TEST, (uint8_t)CLAMP(seconds, 1, 60), false);
 }
 
 void display_ui_get_info(struct display_ui_info *info)
@@ -315,9 +367,14 @@ static void text_right(int row, const char *str, bool invert)
 	fb_text(fb, row, FB_WIDTH - fb_text_width(str), str, invert);
 }
 
+static const char *link_short(enum phenix_host_link link)
+{
+	return (link == PHENIX_LINK_USB) ? "USB" : "ETH";
+}
+
 static void draw_header(const char *title, const struct ui_status *s)
 {
-	const char *link = (board_io_comm_mode() == BOARD_COMM_USB) ? "USB" : "ETH";
+	const char *link = link_short(config_store_boot_link());
 	int x = FB_WIDTH;
 
 	fb_text(fb, ROW_TITLE, 0, "PHENIX-1255", false);
@@ -418,7 +475,12 @@ static void draw_page_network(void)
 	line(2, "MAC %s", mac);
 	line(3, "Ctrl %u/tcp", cfg.ctrl_port);
 	line(4, "Data %u/udp", cfg.sample_port);
-	line(5, "Host link %s", board_comm_mode_str(board_io_comm_mode()));
+	if (config_store_get_link() != config_store_boot_link()) {
+		line(5, "Link %s, reboot: %s", link_short(config_store_boot_link()),
+		     link_short(config_store_get_link()));
+	} else {
+		line(5, "Host link %s", config_store_link_str(config_store_boot_link()));
+	}
 }
 
 static void draw_page_rf(void)
@@ -472,7 +534,6 @@ static void draw_page_hardware(void)
 
 	line(0, "Variant  %s", hw_id_name());
 	line(1, "HW ID    %d (%s)", hw_id_get(), bits);
-	line(2, "Host link %s", board_comm_mode_str(board_io_comm_mode()));
 }
 
 static void draw_pages(const struct ui_status *s)
@@ -565,8 +626,8 @@ static void item_value(enum item item, char *buf, size_t len)
 	case ITEM_AUTO_PAGES:
 		snprintf(buf, len, "%s", ui.cfg.auto_pages ? "on" : "off");
 		break;
-	case ITEM_ENCODER_DIR:
-		snprintf(buf, len, "%s", ui.cfg.encoder_reversed ? "reversed" : "normal");
+	case ITEM_HOST_LINK:
+		snprintf(buf, len, "%s", link_short(config_store_get_link()));
 		break;
 	case ITEM_NET_MODE:
 		snprintf(buf, len, "%s", ui.net.dhcp ? "DHCP" : "static");
@@ -778,12 +839,11 @@ static void menu_select(enum item item)
 	case ITEM_FACTORY_RESET:
 		open_confirm(CONFIRM_FACTORY_RESET);
 		break;
+	case ITEM_HOST_LINK:
+		open_confirm(CONFIRM_HOST_LINK);
+		break;
 	case ITEM_AUTO_PAGES:
 		ui.cfg.auto_pages = !ui.cfg.auto_pages;
-		ui.cfg_dirty = true;
-		break;
-	case ITEM_ENCODER_DIR:
-		ui.cfg.encoder_reversed = !ui.cfg.encoder_reversed;
 		ui.cfg_dirty = true;
 		break;
 	case ITEM_NET_MODE:
@@ -848,20 +908,19 @@ static void menu_adjust(enum item item, int delta, bool fast)
 	}
 }
 
-static void menu_key(enum display_ui_key key, int64_t now)
+static void menu_key(enum display_ui_key key, bool fast)
 {
 	const struct menu *m = &menus[ui.menu];
 	enum item item = m->items[ui.sel];
-	int delta = (key == DISPLAY_KEY_NEXT) ? 1 : -1;
+	int delta = (key == DISPLAY_KEY_RIGHT) ? 1 : -1;
 
 	if (ui.editing) {
 		switch (key) {
-		case DISPLAY_KEY_NEXT:
-		case DISPLAY_KEY_PREV:
-			menu_adjust(item, delta, now - ui.last_adjust < FAST_TURN_MS);
-			ui.last_adjust = now;
+		case DISPLAY_KEY_RIGHT:
+		case DISPLAY_KEY_LEFT:
+			menu_adjust(item, delta, fast);
 			break;
-		case DISPLAY_KEY_SELECT:
+		case DISPLAY_KEY_OK:
 			if (item_ipv4(item) != NULL && ui.octet < 3) {
 				ui.octet++;
 			} else {
@@ -877,12 +936,12 @@ static void menu_key(enum display_ui_key key, int64_t now)
 	}
 
 	switch (key) {
-	case DISPLAY_KEY_NEXT:
-	case DISPLAY_KEY_PREV:
+	case DISPLAY_KEY_RIGHT:
+	case DISPLAY_KEY_LEFT:
 		ui.sel = CLAMP(ui.sel + delta, 0, m->count - 1);
 		menu_scroll();
 		break;
-	case DISPLAY_KEY_SELECT:
+	case DISPLAY_KEY_OK:
 		menu_select(item);
 		break;
 	case DISPLAY_KEY_BACK:
@@ -893,6 +952,12 @@ static void menu_key(enum display_ui_key key, int64_t now)
 }
 
 /* Confirmation dialogs */
+
+static enum phenix_host_link other_link(void)
+{
+	return (config_store_get_link() == PHENIX_LINK_USB) ? PHENIX_LINK_ETHERNET
+							     : PHENIX_LINK_USB;
+}
 
 static void draw_confirm(const struct ui_status *s)
 {
@@ -907,8 +972,8 @@ static void draw_confirm(const struct ui_status *s)
 	case CONFIRM_FACTORY_RESET:
 		draw_header("RESET", s);
 		line(0, "Erase all settings?");
-		line(1, "Network and display");
-		line(2, "return to defaults.");
+		line(1, "Network, display and");
+		line(2, "host link to defaults");
 		break;
 	case CONFIRM_FACTORY_RESET_AGAIN:
 		draw_header("RESET", s);
@@ -919,6 +984,11 @@ static void draw_confirm(const struct ui_status *s)
 		draw_header("NETWORK", s);
 		line(0, "Save the network");
 		line(1, "settings and reboot?");
+		break;
+	case CONFIRM_HOST_LINK:
+		draw_header("HOST LINK", s);
+		line(0, "Switch host link to");
+		line(1, "%s and reboot?", config_store_link_str(other_link()));
 		break;
 	}
 
@@ -945,17 +1015,23 @@ static void reboot_now(bool factory_reset)
 	control_reboot(factory_reset);
 }
 
+/*
+ * Left and Right pick the answer drawn on that side instead of toggling,
+ * so a held or repeated button cannot end on Yes by accident.
+ */
 static void confirm_key(enum display_ui_key key)
 {
 	switch (key) {
-	case DISPLAY_KEY_NEXT:
-	case DISPLAY_KEY_PREV:
-		ui.confirm_yes = !ui.confirm_yes;
+	case DISPLAY_KEY_LEFT:
+		ui.confirm_yes = false;
+		return;
+	case DISPLAY_KEY_RIGHT:
+		ui.confirm_yes = true;
 		return;
 	case DISPLAY_KEY_BACK:
 		ui.confirm_yes = false;
 		break;
-	case DISPLAY_KEY_SELECT:
+	case DISPLAY_KEY_OK:
 	default:
 		break;
 	}
@@ -983,6 +1059,14 @@ static void confirm_key(enum display_ui_key key)
 			break;
 		}
 		ui.net_dirty = false;
+		reboot_now(false);
+		break;
+	case CONFIRM_HOST_LINK:
+		save_display_cfg(true);
+		if (config_store_set_link(other_link()) < 0) {
+			show_message("NOT SAVED", "Saving failed.", MENU_MAIN, ui.sel);
+			break;
+		}
 		reboot_now(false);
 		break;
 	}
@@ -1133,23 +1217,23 @@ static void wake(int64_t now)
 	}
 }
 
-static void handle_key(enum display_ui_key key, int64_t now)
+static void handle_key(enum display_ui_key key, bool fast, int64_t now)
 {
 	switch (ui.screen) {
 	case SCREEN_PAGES:
-		if (key == DISPLAY_KEY_SELECT) {
+		if (key == DISPLAY_KEY_OK) {
 			open_menu(MENU_MAIN, 0);
 		} else if (key == DISPLAY_KEY_BACK) {
 			ui.page = PAGE_STATUS;
 		} else {
-			ui.page = (ui.page + ((key == DISPLAY_KEY_NEXT) ? 1 : PAGE_COUNT - 1)) %
+			ui.page = (ui.page + ((key == DISPLAY_KEY_RIGHT) ? 1 : PAGE_COUNT - 1)) %
 				  PAGE_COUNT;
 			ui.manual_until = now + MANUAL_HOLD_MS;
 		}
 		ui.page_since = now;
 		break;
 	case SCREEN_MENU:
-		menu_key(key, now);
+		menu_key(key, fast);
 		break;
 	case SCREEN_ABOUT:
 		/* The selection is unchanged, so this returns to the About entry */
@@ -1185,7 +1269,7 @@ static void handle_event(const struct ui_event *ev, int64_t now)
 	wake(now);
 	/* The first input on a dimmed display only brightens it */
 	if (!was_dimmed) {
-		handle_key((enum display_ui_key)ev->arg, now);
+		handle_key((enum display_ui_key)ev->arg, ev->fast, now);
 	}
 }
 
@@ -1277,7 +1361,7 @@ static void ui_thread(void *p1, void *p2, void *p3)
 
 		if (k_msgq_get(&ui_events, &ev, K_MSEC(REFRESH_MS)) == 0) {
 			handle_event(&ev, k_uptime_get());
-			/* Apply queued inputs before drawing, e.g. a fast encoder turn */
+			/* Apply queued inputs before drawing, e.g. fast repeated steps */
 			while (k_msgq_get(&ui_events, &ev, K_NO_WAIT) == 0) {
 				handle_event(&ev, k_uptime_get());
 			}

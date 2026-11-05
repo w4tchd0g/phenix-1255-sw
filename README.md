@@ -60,7 +60,7 @@ timing-critical driver, not the base station software.
 > [!NOTE]
 > **Status:** firmware 0.1.0-dev. The target hardware is the
 > [phenix-1255-hw](https://github.com/labdvm/Phenix-1255-HW) board on the FRDM-MCXN947 (SX1255, status LEDs, PA
-> enable MOSFET, OLED display and rotary encoder). The first tests were made with a µCell board
+> enable MOSFET, OLED display and three buttons). The first tests were made with a µCell board
 > wired to the FRDM-MCXN947: streaming over HS USB and Ethernet, the front
 > panel display and over-the-air operation with FlowStation work. A µCell
 > board or another SX1255 board built the same way is therefore usable as
@@ -76,7 +76,7 @@ timing-critical driver, not the base station software.
 | Transceiver | Semtech SX1255, 400 to 510 MHz, 38.4 MHz TCXO, full duplex |
 | Sample rates | 600 (default), 300, 150, 75, 50, 25 kHz |
 | Timing | Shared 64-bit RX/TX sample counter, exact timed TX, constant TX-to-RX loop delay |
-| Host link | HS USB (vendor class, bulk) or Ethernet (TCP control, UDP samples), selected by the `COMM_SEL` switch |
+| Host link | HS USB (vendor class, bulk) or Ethernet (TCP control, UDP samples), selected in the front panel menu, web interface or console |
 | Host software | SoapySDR module for Linux and macOS, patches for TETRA-Bluestation and FlowStation |
 | Safety | PA enable only while TX streams, immediate shutdown on link loss or errors, hardware watchdog |
 
@@ -106,7 +106,8 @@ an exact sample. Details: [architecture.md](_doc/architecture.md).
   [stream.md](firmware/src/stream/_doc/stream.md#tx-to-rx-loop-delay)).
 
 **Host link**
-- HS USB or Ethernet, selected at boot by the `COMM_SEL` switch.
+- HS USB (factory default) or Ethernet, selected in the front panel menu,
+  the web interface or on the console; applied with a reboot.
 - Ethernet: DHCP with fallback to `192.168.2.10/24`, static configuration,
   mDNS name `phenix-1255.local`, web interface for the network settings
   (active in both modes).
@@ -120,8 +121,8 @@ an exact sample. Details: [architecture.md](_doc/architecture.md).
 
 **Front panel**
 - 0.96" SSD1306 OLED with status pages (frequencies, link, network, gains,
-  counters) and a menu operated with a rotary encoder for display, network,
-  reboot and factory reset settings.
+  counters) and a menu operated with three buttons (Left, OK, Right) for
+  display, network, host link, reboot and factory reset settings.
 
 **Host software**
 - SoapySDR module for Linux and macOS: timestamps on every read, exact timed
@@ -146,14 +147,17 @@ Linux or macOS host. The linked documents contain the details.
   [hardware.md](_doc/hardware.md#pin-assignment) (reduced feature set, see
   [hardware.md](_doc/hardware.md#µcell-and-compatible-boards)).
 - USB cable to J17 (MCU-Link) for flashing and the console.
-- Host link, selected by the `COMM_SEL` switch when the board boots:
+- Host link, a stored setting that takes effect after a reboot:
 
-  | `COMM_SEL` (P2_7) | Host link | Connection |
-  |---|---|---|
-  | Open (high) | HS USB | HS USB port of the FRDM-MCXN947 |
-  | Closed to GND (low) | Ethernet | Ethernet port, network with DHCP or 192.168.2.0/24 |
+  | Host link | Connection |
+  |---|---|
+  | HS USB (factory default) | HS USB port of the FRDM-MCXN947 |
+  | Ethernet | Ethernet port, network with DHCP or 192.168.2.0/24 |
 
-  Ethernet and the web interface are active in both modes.
+  Switch it with *Host link* in the front panel menu, the *Host link* field
+  of the web interface or `phenix config set link <usb|ethernet>` on the
+  console ([config.md](firmware/src/config/_doc/config.md#host-link)).
+  Ethernet and the web interface are active with both settings.
 
 ### 2. Build and flash the firmware
 
@@ -234,7 +238,7 @@ build/soapy/phx_soapy_test rx "driver=phenix-1255" 10              # 10 s RX che
 On Ethernet the device uses DHCP. Without a lease after 30 s it adds the
 fallback address **192.168.2.10/24** (yellow LED on). The web interface at
 `http://phenix-1255.local/` (or the device IP address) shows the status and
-changes the network settings; it has no authentication, so use the device on
+changes the host link and network settings; it has no authentication, so use the device on
 a trusted network only. Holding SW2 during boot restores the factory
 defaults.
 
@@ -318,11 +322,11 @@ as well.
 
 | Command | Shows or does |
 |---|---|
-| `phenix status` | Host link selected by `COMM_SEL`, PA state |
+| `phenix status` | Host link in use (and the stored one until the reboot), PA state |
 | `sx1255 info` | Frequencies, sample rate, gains, PLL lock, RX input |
 | `stream status` | Sample counter, dropped RX samples, late/early TX packets, FIFO and frame sync errors |
 | `stream rxstats` | RX level, DC offset and dominant tone of the received signal (while a stream runs) |
-| `phenix config show` | Stored network configuration |
+| `phenix config show` | Stored network configuration and host link |
 | `net iface` | Current IP address, link state and MAC address |
 | `net ping 192.168.2.1` | Reachability of a host from the device |
 | `phenix display dump` | Front panel content as text |
@@ -351,7 +355,7 @@ transmitting tests. All commands: [shell.md](firmware/src/shell/_doc/shell.md).
 | Linux: device listed with "no access" | udev rule not installed, see [step 3](#3-build-the-soapysdr-module) |
 | Station or `SoapySDRUtil` does not find `phenix-1255` | Module not installed and `SOAPY_SDR_PLUGIN_PATH` not set; `SoapySDRUtil --info` lists the search paths and loaded modules |
 | `SoapySDRUtil --find` does not list the Ethernet device | A generic enumeration does not search the network; pass `driver=phenix-1255` or `addr=...` |
-| Ethernet: web interface works, but SoapySDR cannot connect | `COMM_SEL` is open (HS USB), the control and sample channels run over USB only; set the switch to GND (Ethernet) and reset the board |
+| Ethernet: web interface works, but SoapySDR cannot connect | The host link is set to HS USB (factory default), the control and sample channels run over USB only; set *Host link* to Ethernet in the menu, the web interface or with `phenix config set link ethernet` and reboot |
 | Second application is rejected | Only one host session at a time is supported |
 | `phenix-1255.local` resolves slowly on macOS | macOS also asks for an IPv6 address; use the IP address |
 | Device unreachable after changing the network settings | Hold SW2 during boot (factory reset) or use `phenix config` on the console, see [ethernet.md](firmware/src/ethernet/_doc/ethernet.md) |

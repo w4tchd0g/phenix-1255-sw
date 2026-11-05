@@ -4,8 +4,8 @@
 
 The SX1255 is the I2S controller. All sample timing derives from its bit clock:
 the firmware counts I2S frames and timestamps every sample with a 64-bit
-counter that is shared by RX and TX. The host link (HS USB or Ethernet,
-selected by `COMM_SEL` at boot) carries a control channel and a sample
+counter that is shared by RX and TX. The host link (HS USB or Ethernet, a
+stored setting applied at boot) carries a control channel and a sample
 channel with the same message formats on both transports.
 
 ## Software modules

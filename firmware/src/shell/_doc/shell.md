@@ -13,17 +13,17 @@ the relocation script would otherwise pick Zephyr's own `shell_cmds.c`
 
 | Command | Purpose |
 |---|---|
-| `phenix status` | Hardware variant and HW_ID jumpers, host link selected by `COMM_SEL` at boot and the current pin level, PA state |
+| `phenix status` | Hardware variant and HW_ID jumpers, host link in use (and the stored one if it differs until the next reboot), PA state |
 | `phenix led <err\|warn\|ok> <off\|on\|slow\|fast>` | Set an LED ([board.md](../../board/_doc/board.md#status-leds)) |
 | `phenix wdt_test` | Stop feeding the watchdog, provokes a reset ([board.md](../../board/_doc/board.md#watchdog)) |
-| `phenix config show` | Stored network configuration |
-| `phenix config set <key> <value>` | Validate and save a network value: `dhcp`, `ip`, `netmask`, `gateway`, `dns`, `ctrl_port`, `sample_port` ([ethernet.md](../../ethernet/_doc/ethernet.md#configuration-on-the-console)) |
+| `phenix config show` | Stored network configuration and host link |
+| `phenix config set <key> <value>` | Validate and save a value: `link` (`usb`/`ethernet`, [config.md](../../config/_doc/config.md#host-link)), `dhcp`, `ip`, `netmask`, `gateway`, `dns`, `ctrl_port`, `sample_port` ([ethernet.md](../../ethernet/_doc/ethernet.md#configuration-on-the-console)) |
 | `phenix display` | Display state and settings |
-| `phenix display key <prev\|next\|select\|back>` | Simulate a front panel input |
+| `phenix display key <left\|right\|ok\|back>` | Simulate a front panel button (`ok` short, `back` long press of OK) |
 | `phenix display test [s]` | Colour zone test pattern (default 10 s) |
 | `phenix display dump` | Print the content last sent to the display ([display.md](../../display/_doc/display.md)) |
 
-Network settings take effect after `kernel reboot cold`.
+Network and host link settings take effect after `kernel reboot cold`.
 
 On unsupported hardware the start-up is halted
 ([board.md](../../board/_doc/board.md#hardware-variant)). `phenix status`

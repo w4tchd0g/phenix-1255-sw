@@ -11,7 +11,8 @@ Target hardware is the phenix-1255-hw board (schematic, Gerber, BOM:
 ran on a µCell board; µCell and compatible SX1255 boards work with a reduced
 feature set, see [hardware.md](_doc/hardware.md#µcell-and-compatible-boards).
 Zephyr firmware streams timestamped I/Q samples over HS USB or Ethernet
-(selected by the `COMM_SEL` switch at boot); a SoapySDR module
+(stored *Host link* setting, default USB, changed in the front panel menu,
+web interface or console and applied at boot); a SoapySDR module
 (`driver=phenix-1255`) serves TETRA base station software
 (TETRA-Bluestation, FlowStation). Supported hosts: **Linux and macOS**
 (Windows is not supported). Status and features: [README.md](README.md).
@@ -187,5 +188,5 @@ must not be changed without a hardware test.
 - **LPI2C3 (OLED):** needs `bus-idle-timeout` in the devicetree, otherwise the
   bus busy flag stays set after boot and every transfer fails (scan finds
   nothing). Module labels give 8-bit addresses (0x78/0x7A); the panel answers
-  at 7-bit 0x3C. LPI2C3 and GPIO0/1 interrupts run at priority 3, below eDMA
-  and SAI.
+  at 7-bit 0x3C. LPI2C3 and GPIO0/1/2/4 interrupts run at priority 3, below
+  eDMA and SAI.

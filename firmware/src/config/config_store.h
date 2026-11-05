@@ -30,13 +30,20 @@
 #define PHENIX_DEFAULT_DISPLAY_CONTRAST         8
 #define PHENIX_DEFAULT_DISPLAY_DIM_S            300
 #define PHENIX_DEFAULT_DISPLAY_AUTO_PAGES       true
-#define PHENIX_DEFAULT_DISPLAY_ENCODER_REVERSED false
+
+/* Host link for the control channel and the sample stream */
+#define PHENIX_DEFAULT_HOST_LINK PHENIX_LINK_USB
 
 /* TCP port of the web interface, not configurable */
 #define PHENIX_HTTP_PORT 80
 
 /* Size of a dotted-quad string including the terminator */
 #define PHENIX_IPV4_STR_LEN 16
+
+enum phenix_host_link {
+	PHENIX_LINK_USB,
+	PHENIX_LINK_ETHERNET,
+};
 
 struct phenix_net_cfg {
 	bool dhcp;
@@ -58,8 +65,6 @@ struct phenix_display_cfg {
 	uint16_t dim_timeout_s;
 	/* Cycle through the status pages */
 	bool auto_pages;
-	/* Swap the encoder turn directions, for encoders wired the other way round */
-	bool encoder_reversed;
 };
 
 /**
@@ -81,6 +86,18 @@ void config_store_get_display(struct phenix_display_cfg *cfg);
 
 /** Validate and persist the display settings. */
 int config_store_set_display(const struct phenix_display_cfg *cfg);
+
+/** Host link loaded at boot; the transports are started for this link. */
+enum phenix_host_link config_store_boot_link(void);
+
+/** Stored host link; differs from the boot link until the next reboot. */
+enum phenix_host_link config_store_get_link(void);
+
+/** Persist the host link. Applied at next boot. */
+int config_store_set_link(enum phenix_host_link link);
+
+/** "HS USB" or "Ethernet" */
+const char *config_store_link_str(enum phenix_host_link link);
 
 /**
  * Erase the settings partition. The factory defaults apply after the next

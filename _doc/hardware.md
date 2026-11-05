@@ -3,9 +3,9 @@
 ## Overview
 
 The phenix-1255-hw board carries a Semtech SX1255 transceiver with a
-38.4 MHz reference oscillator, three status LEDs, the `COMM_SEL` switch,
-a P-MOSFET with gate pull-up that switches the PA supply (VBAT3), the front
-panel OLED display and a rotary encoder with push button
+38.4 MHz reference oscillator, three status LEDs, a P-MOSFET with gate
+pull-up that switches the PA supply (VBAT3), the front panel OLED display
+and three buttons Left, OK and Right
 ([display.md](../firmware/src/display/_doc/display.md)). It is connected
 to an NXP FRDM-MCXN947. A µCell board or another SX1255 board built the same
 way can be used instead with a reduced feature set, see
@@ -18,8 +18,12 @@ repository [Phenix-1255-HW](https://github.com/labdvm/Phenix-1255-HW).
 | FRDM-MCXN947 connector | Use |
 |---|---|
 | J17 (MCU-Link) | Flashing, debug, console |
-| HS USB | Host link when `COMM_SEL` is high |
-| Ethernet | Host link when `COMM_SEL` is low, web interface in both modes |
+| HS USB | Host link when *Host link* is set to USB (default) |
+| Ethernet | Host link when *Host link* is set to Ethernet, web interface with both settings |
+
+The host link is selected in the front panel menu, on the console or in the
+web interface and takes effect after a reboot
+([config.md](../firmware/src/config/_doc/config.md#host-link)).
 
 ## Pin assignment
 
@@ -41,7 +45,6 @@ repository [Phenix-1255-HW](https://github.com/labdvm/Phenix-1255-HW).
 | LED0 (red, ERR) | P0_14 | GPIO output, active high | |
 | LED1 (yellow, WARN/INFO) | P0_22 | GPIO output, active high | |
 | LED2 (green, OK) | P0_15 | GPIO output, active high | |
-| COMM_SEL | P2_7 | GPIO input, internal pull-up | High (open) = HS USB, low = Ethernet |
 | FACTORY_RST (SW2) | P0_23 | GPIO input, pull-up, active low | Held during boot = factory reset |
 | HW_ID0 | P3_5 | GPIO input, internal pull-down | Not connected on phenix-1255-hw (reads 0); reserved for a solder jumper to +3V3 on later boards, bit 0 of the hardware ID |
 | HW_ID1 | P3_4 | GPIO input, internal pull-down | Not connected on phenix-1255-hw (reads 0); reserved for a solder jumper to +3V3 on later boards, bit 1 of the hardware ID |
@@ -49,19 +52,18 @@ repository [Phenix-1255-HW](https://github.com/labdvm/Phenix-1255-HW).
 | FRDM red LED | P0_10 | GPIO output, active low | On the FRDM-MCXN947; blinks fast on unsupported hardware |
 | OLED SDA | P1_0 | LPI2C3 SDA (FC3_P0) | Front panel display, see [display.md](../firmware/src/display/_doc/display.md) |
 | OLED SCL | P1_1 | LPI2C3 SCL (FC3_P1) | |
-| Encoder A | P1_19 | GPIO input, internal pull-up | |
-| Encoder B | P1_18 | GPIO input, internal pull-up | |
-| Encoder push button | P0_11 | GPIO input, pull-up, active low | |
-| SW3 | P0_6 | GPIO input, pull-up, active low | Steps the display pages; ISP mode select only during reset |
+| BTN0 (Left) | P2_0 (J3-1) | GPIO input, internal pull-down, active high | Button to +3V3 |
+| BTN1 (OK) | P1_22 (J3-3) | GPIO input, internal pull-down, active high | Button to +3V3; long press = back |
+| BTN2 (Right) | P4_12 (J4-1) | GPIO input, internal pull-down, active high | Button to +3V3 |
 
 The devicetree description is in
 [`firmware/boards/frdm_mcxn947_mcxn947_cpu0.overlay`](../firmware/boards/frdm_mcxn947_mcxn947_cpu0.overlay).
 
 ## Board functions
 
-PA enable, status LEDs, the `COMM_SEL` switch, the factory reset button, the
-hardware variant (HW_ID jumpers) and the watchdog: [board.md](../firmware/src/board/_doc/board.md). Front panel
-display and encoder: [display.md](../firmware/src/display/_doc/display.md).
+PA enable, status LEDs, the factory reset button, the hardware variant
+(HW_ID jumpers) and the watchdog: [board.md](../firmware/src/board/_doc/board.md). Front panel
+display and buttons: [display.md](../firmware/src/display/_doc/display.md).
 Memory layout: [firmware.md](../firmware/_doc/firmware.md#memory).
 
 ## µCell and compatible boards
@@ -85,11 +87,10 @@ Compared to phenix-1255-hw the feature set of such a setup is reduced:
 
 - DIO0, DIO1, DIO3, PA_EN and LED0 to LED2 are usually not connected. An
   external PA is then not switched by the firmware.
-- The OLED display and the rotary encoder can be added with jumper wires;
-  without an encoder, SW3 steps the display pages.
+- The OLED display and the three buttons can be added with jumper wires
+  to the FRDM-MCXN947 headers (buttons to +3V3).
 - Indicator LEDs on the SX1255 board (e.g. the µCell RX/TX LEDs) are not
   driven.
-- `COMM_SEL` is set with a wire bridge from P2_7 to GND.
 
 At 600 kHz sample rate the I2S bit clock is 38.4 MHz. Signal integrity over
 jumper wires is a known limitation of this setup.

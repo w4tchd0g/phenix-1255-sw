@@ -1,7 +1,9 @@
 # Board I/O and watchdog
 
 `board_io.c` drives the board-level I/O of phenix-1255-hw: PA enable, the
-three status LEDs, the `COMM_SEL` switch and the factory reset button (SW2).
+three status LEDs and the factory reset button (SW2). The host link (HS USB
+or Ethernet) is a stored setting, see
+[config.md](../../config/_doc/config.md#host-link).
 `hw_id.c` detects the hardware variant from the HW_ID pins.
 `watchdog.c` runs the hardware watchdog. Pins:
 [hardware.md](../../../../_doc/hardware.md#pin-assignment).
@@ -35,21 +37,13 @@ LED0 blinks slowly after a watchdog reset until the next successful stream
 start. The red LED of the FRDM-MCXN947 itself (P0_10) is used only on
 unsupported hardware ([Hardware variant](#hardware-variant)).
 
-## COMM_SEL switch
-
-A switch on phenix-1255-hw connects P2_7 to GND or leaves it open. The pin
-is sampled once at boot; changing the switch takes effect after the next
-reset. Open (pulled up) selects HS USB, closed to GND selects Ethernet for
-the control channel and the sample stream. Ethernet and the web
-interface are active in both modes.
-
 ## Factory reset
 
 Hold SW2 while the board starts (power-on or reset button) for at least
 50 ms after reset. The settings partition is erased and all LEDs blink fast
 for two seconds. The network configuration returns to the factory defaults
 (DHCP on, fallback address 192.168.2.10/24, control port 1255/TCP, sample
-port 1256/UDP), the display settings to theirs. The front panel menu offers
+port 1256/UDP), the host link to HS USB and the display settings to theirs. The front panel menu offers
 the same reset at runtime ([display.md](../../display/_doc/display.md#menu)).
 
 ## Hardware variant

@@ -23,7 +23,8 @@ LOG_MODULE_REGISTER(config_store, LOG_LEVEL_INF);
 #define SETTINGS_PARTITION_ID DT_PARTITION_ID(DT_CHOSEN(zephyr_settings_partition))
 
 #define NET_RECORD_VERSION     1
-#define DISPLAY_RECORD_VERSION 2
+#define DISPLAY_RECORD_VERSION 1
+#define LINK_RECORD_VERSION    1
 
 /* On-flash layout of the network configuration, little endian */
 struct net_record {
@@ -43,12 +44,20 @@ struct display_record {
 	uint8_t contrast;
 	uint8_t dim_timeout_s[2];
 	uint8_t auto_pages;
-	uint8_t encoder_reversed;
 } __packed;
 
-/* Version 1 ended here; such a record keeps its settings after an update */
-#define DISPLAY_RECORD_V1      1
-#define DISPLAY_RECORD_V1_SIZE offsetof(struct display_record, encoder_reversed)
+/*
+ * Version 2 records carry one more byte for a setting that no longer
+ * exists; their other fields are read, so the settings survive an update.
+ */
+#define DISPLAY_RECORD_V2      2
+#define DISPLAY_RECORD_V2_SIZE (sizeof(struct display_record) + 1U)
+
+/* On-flash layout of the host link selection */
+struct link_record {
+	uint8_t version;
+	uint8_t link;
+} __packed;
 
 /*
  * The MCXN flash driver (soc_flash_mcux.c, Zephyr v4.5.0-rc3) invalidates
@@ -69,6 +78,8 @@ static void flash_caches_release(void)
 
 static struct phenix_net_cfg net_cfg;
 static struct phenix_display_cfg display_cfg;
+static enum phenix_host_link host_link;
+static enum phenix_host_link boot_link;
 static K_MUTEX_DEFINE(cfg_lock);
 
 static void display_defaults(struct phenix_display_cfg *cfg)
@@ -76,7 +87,6 @@ static void display_defaults(struct phenix_display_cfg *cfg)
 	cfg->contrast = PHENIX_DEFAULT_DISPLAY_CONTRAST;
 	cfg->dim_timeout_s = PHENIX_DEFAULT_DISPLAY_DIM_S;
 	cfg->auto_pages = PHENIX_DEFAULT_DISPLAY_AUTO_PAGES;
-	cfg->encoder_reversed = PHENIX_DEFAULT_DISPLAY_ENCODER_REVERSED;
 }
 
 static bool display_cfg_valid(const struct phenix_display_cfg *cfg)
@@ -162,36 +172,59 @@ static int phenix_settings_set(const char *key, size_t len, settings_read_cb rea
 	}
 
 	if (settings_name_steq(key, "display", &next) && next == NULL) {
-		struct display_record rec = {.encoder_reversed =
-						     PHENIX_DEFAULT_DISPLAY_ENCODER_REVERSED};
+		uint8_t raw[DISPLAY_RECORD_V2_SIZE];
+		struct display_record rec;
 		struct phenix_display_cfg cfg;
 		uint8_t version;
 		ssize_t rd;
 
 		if (len == sizeof(rec)) {
 			version = DISPLAY_RECORD_VERSION;
-		} else if (len == DISPLAY_RECORD_V1_SIZE) {
-			version = DISPLAY_RECORD_V1;
+		} else if (len == DISPLAY_RECORD_V2_SIZE) {
+			version = DISPLAY_RECORD_V2;
 		} else {
 			LOG_WRN("Stored display settings have wrong size, ignored");
 			return 0;
 		}
 
-		rd = read_cb(cb_arg, &rec, len);
+		rd = read_cb(cb_arg, raw, len);
 		if (rd != (ssize_t)len) {
 			return (rd < 0) ? (int)rd : -EIO;
 		}
+		memcpy(&rec, raw, sizeof(rec));
 
 		cfg.contrast = rec.contrast;
 		cfg.dim_timeout_s = sys_get_le16(rec.dim_timeout_s);
 		cfg.auto_pages = rec.auto_pages != 0U;
-		cfg.encoder_reversed = rec.encoder_reversed != 0U;
 		if (rec.version != version || !display_cfg_valid(&cfg)) {
 			LOG_WRN("Stored display settings invalid, ignored");
 			return 0;
 		}
 
 		display_cfg = cfg;
+		return 0;
+	}
+
+	if (settings_name_steq(key, "link", &next) && next == NULL) {
+		struct link_record rec;
+		ssize_t rd;
+
+		if (len != sizeof(rec)) {
+			LOG_WRN("Stored host link has wrong size, ignored");
+			return 0;
+		}
+
+		rd = read_cb(cb_arg, &rec, sizeof(rec));
+		if (rd != sizeof(rec)) {
+			return (rd < 0) ? (int)rd : -EIO;
+		}
+
+		if (rec.version != LINK_RECORD_VERSION || rec.link > PHENIX_LINK_ETHERNET) {
+			LOG_WRN("Stored host link invalid, ignored");
+			return 0;
+		}
+
+		host_link = (enum phenix_host_link)rec.link;
 		return 0;
 	}
 
@@ -223,6 +256,8 @@ int config_store_init(bool factory_reset)
 
 	config_store_defaults(&net_cfg);
 	display_defaults(&display_cfg);
+	host_link = PHENIX_DEFAULT_HOST_LINK;
+	boot_link = host_link;
 
 	if (factory_reset) {
 		ret = config_store_erase();
@@ -243,6 +278,8 @@ int config_store_init(bool factory_reset)
 
 	ret = settings_load_subtree("phenix");
 	flash_caches_release();
+	/* Records loaded before a failure still apply */
+	boot_link = host_link;
 	if (ret < 0) {
 		LOG_ERR("Loading settings failed (%d)", ret);
 		return ret;
@@ -307,7 +344,6 @@ int config_store_set_display(const struct phenix_display_cfg *cfg)
 	rec.contrast = cfg->contrast;
 	sys_put_le16(cfg->dim_timeout_s, rec.dim_timeout_s);
 	rec.auto_pages = cfg->auto_pages ? 1U : 0U;
-	rec.encoder_reversed = cfg->encoder_reversed ? 1U : 0U;
 
 	k_mutex_lock(&cfg_lock, K_FOREVER);
 	ret = settings_save_one("phenix/display", &rec, sizeof(rec));
@@ -322,6 +358,53 @@ int config_store_set_display(const struct phenix_display_cfg *cfg)
 	}
 
 	return ret;
+}
+
+enum phenix_host_link config_store_boot_link(void)
+{
+	return boot_link;
+}
+
+enum phenix_host_link config_store_get_link(void)
+{
+	enum phenix_host_link link;
+
+	k_mutex_lock(&cfg_lock, K_FOREVER);
+	link = host_link;
+	k_mutex_unlock(&cfg_lock);
+
+	return link;
+}
+
+int config_store_set_link(enum phenix_host_link link)
+{
+	struct link_record rec = {.version = LINK_RECORD_VERSION, .link = (uint8_t)link};
+	int ret;
+
+	if (link != PHENIX_LINK_USB && link != PHENIX_LINK_ETHERNET) {
+		return -EINVAL;
+	}
+
+	k_mutex_lock(&cfg_lock, K_FOREVER);
+	ret = settings_save_one("phenix/link", &rec, sizeof(rec));
+	flash_caches_release();
+	if (ret == 0) {
+		host_link = link;
+	}
+	k_mutex_unlock(&cfg_lock);
+
+	if (ret < 0) {
+		LOG_ERR("Saving host link failed (%d)", ret);
+	} else {
+		LOG_INF("Host link %s stored, applied after reboot", config_store_link_str(link));
+	}
+
+	return ret;
+}
+
+const char *config_store_link_str(enum phenix_host_link link)
+{
+	return (link == PHENIX_LINK_USB) ? "HS USB" : "Ethernet";
 }
 
 static uint32_t ipv4_to_u32(const uint8_t addr[4])

@@ -69,10 +69,13 @@ static int cmd_status(const struct shell *sh, size_t argc, char **argv)
 		return 0;
 	}
 
-	int level = board_io_comm_sel_level();
-
-	shell_print(sh, "comm_sel:    %s (pin now: %s)", board_comm_mode_str(board_io_comm_mode()),
-		    (level < 0) ? "error" : (level ? "high" : "low"));
+	if (config_store_get_link() != config_store_boot_link()) {
+		shell_print(sh, "host link:   %s (%s after reboot)",
+			    config_store_link_str(config_store_boot_link()),
+			    config_store_link_str(config_store_get_link()));
+	} else {
+		shell_print(sh, "host link:   %s", config_store_link_str(config_store_boot_link()));
+	}
 	shell_print(sh, "pa:          %s", board_pa_is_enabled() ? "enabled" : "disabled");
 
 	return 0;
@@ -87,6 +90,33 @@ static int cmd_config_show(const struct shell *sh, size_t argc, char **argv)
 
 	config_store_get_net(&cfg);
 	print_net_cfg(sh, &cfg);
+	shell_print(sh, "link:        %s",
+		    (config_store_get_link() == PHENIX_LINK_USB) ? "usb" : "ethernet");
+
+	return 0;
+}
+
+static int set_link(const struct shell *sh, const char *val)
+{
+	enum phenix_host_link link;
+	int ret;
+
+	if (strcmp(val, "usb") == 0) {
+		link = PHENIX_LINK_USB;
+	} else if (strcmp(val, "ethernet") == 0) {
+		link = PHENIX_LINK_ETHERNET;
+	} else {
+		shell_error(sh, "Invalid value '%s' for link (usb|ethernet)", val);
+		return -EINVAL;
+	}
+
+	ret = config_store_set_link(link);
+	if (ret < 0) {
+		shell_error(sh, "Saving failed (%d)", ret);
+		return ret;
+	}
+
+	shell_print(sh, "Saved. Takes effect after reboot.");
 
 	return 0;
 }
@@ -117,6 +147,10 @@ static int cmd_config_set(const struct shell *sh, size_t argc, char **argv)
 	ret = check_hw(sh);
 	if (ret < 0) {
 		return ret;
+	}
+
+	if (strcmp(key, "link") == 0) {
+		return set_link(sh, val);
 	}
 
 	config_store_get_net(&cfg);
@@ -199,9 +233,9 @@ static int cmd_led(const struct shell *sh, size_t argc, char **argv)
 }
 
 SHELL_STATIC_SUBCMD_SET_CREATE(sub_config,
-	SHELL_CMD(show, NULL, "Show stored network configuration", cmd_config_show),
+	SHELL_CMD(show, NULL, "Show stored configuration", cmd_config_show),
 	SHELL_CMD_ARG(set, NULL,
-		      "Set and save a value: <dhcp|ip|netmask|gateway|dns|ctrl_port|"
+		      "Set and save a value: <link|dhcp|ip|netmask|gateway|dns|ctrl_port|"
 		      "sample_port> <value>",
 		      cmd_config_set, 3, 0),
 	SHELL_SUBCMD_SET_END);
@@ -234,7 +268,6 @@ static int cmd_display_status(const struct shell *sh, size_t argc, char **argv)
 		    info.dimmed ? " (dimmed)" : "");
 	shell_print(sh, "dim after:   %u s", cfg.dim_timeout_s);
 	shell_print(sh, "auto pages:  %s", cfg.auto_pages ? "on" : "off");
-	shell_print(sh, "encoder:     %s", cfg.encoder_reversed ? "reversed" : "normal");
 
 	return 0;
 }
@@ -242,9 +275,9 @@ static int cmd_display_status(const struct shell *sh, size_t argc, char **argv)
 static int cmd_display_key(const struct shell *sh, size_t argc, char **argv)
 {
 	static const char *const keys[] = {
-		[DISPLAY_KEY_PREV] = "prev",
-		[DISPLAY_KEY_NEXT] = "next",
-		[DISPLAY_KEY_SELECT] = "select",
+		[DISPLAY_KEY_LEFT] = "left",
+		[DISPLAY_KEY_RIGHT] = "right",
+		[DISPLAY_KEY_OK] = "ok",
 		[DISPLAY_KEY_BACK] = "back",
 	};
 
@@ -257,7 +290,7 @@ static int cmd_display_key(const struct shell *sh, size_t argc, char **argv)
 		}
 	}
 
-	shell_error(sh, "Usage: phenix display key <prev|next|select|back>");
+	shell_error(sh, "Usage: phenix display key <left|right|ok|back>");
 
 	return -EINVAL;
 }
@@ -305,7 +338,7 @@ static int cmd_display_dump(const struct shell *sh, size_t argc, char **argv)
 
 SHELL_STATIC_SUBCMD_SET_CREATE(sub_display,
 	SHELL_CMD(status, NULL, "Show display state and settings", cmd_display_status),
-	SHELL_CMD_ARG(key, NULL, "Simulate an input: <prev|next|select|back>", cmd_display_key,
+	SHELL_CMD_ARG(key, NULL, "Simulate an input: <left|right|ok|back>", cmd_display_key,
 		      2, 0),
 	SHELL_CMD_ARG(test, NULL, "Show the colour zone test pattern: [seconds]",
 		      cmd_display_test, 1, 1),
