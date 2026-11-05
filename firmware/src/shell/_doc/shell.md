@@ -18,6 +18,9 @@ the relocation script would otherwise pick Zephyr's own `shell_cmds.c`
 | `phenix wdt_test` | Stop feeding the watchdog, provokes a reset ([board.md](../../board/_doc/board.md#watchdog)) |
 | `phenix config show` | Stored network configuration and host link |
 | `phenix config set <key> <value>` | Validate and save a value: `link` (`usb`/`ethernet`, [config.md](../../config/_doc/config.md#host-link)), `dhcp`, `ip`, `netmask`, `gateway`, `dns`, `ctrl_port`, `sample_port` ([ethernet.md](../../ethernet/_doc/ethernet.md#configuration-on-the-console)) |
+| `phenix gain` | Gain source and gains of RX and TX |
+| `phenix gain mode <rx\|tx> <host\|manual>` | Select the gain source of a direction ([radio.md](../../radio/_doc/radio.md#gain-source)) |
+| `phenix gain set <lna\|pga\|dac\|mixer> <dB>` | Set a manual gain; refused while the direction is in host mode |
 | `phenix display` | Display state and settings |
 | `phenix display key <left\|right\|ok\|back>` | Simulate a front panel button (`ok` short, `back` long press of OK) |
 | `phenix display test [s]` | Colour zone test pattern (default 10 s) |

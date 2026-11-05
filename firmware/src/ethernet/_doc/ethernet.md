@@ -68,7 +68,10 @@ Form fields of `/config`: `link` (`usb`/`ethernet`), `dhcp` (`on`/`off`),
 
 `/status.json` reports the host link in use as `host_link` and the stored
 one, which applies after the next reboot, as `host_link_saved` (`usb` or
-`ethernet`).
+`ethernet`). `rx_gain_mode` and `tx_gain_mode` (`host` or `manual`) and
+`lna`, `pga`, `dac`, `mixer` (dB) report the gain source and the gains; the
+status table shows the same. Gains are not changed in the web interface
+([radio.md](../../radio/_doc/radio.md#gain-source)).
 
 The web interface is active with both host link settings.
 

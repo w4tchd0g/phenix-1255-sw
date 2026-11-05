@@ -19,6 +19,7 @@
 #include "config/config_store.h"
 #include "display/display_fb.h"
 #include "display/display_ui.h"
+#include "radio/gain_ctrl.h"
 #include "radio/sx1255.h"
 #include "radio/sx1255_regs.h"
 #include "stream/sample_io.h"
@@ -251,6 +252,104 @@ static int cmd_wdt_test(const struct shell *sh, size_t argc, char **argv)
 	return 0;
 }
 
+static int cmd_gain_status(const struct shell *sh, size_t argc, char **argv)
+{
+	ARG_UNUSED(argc);
+	ARG_UNUSED(argv);
+
+	shell_print(sh, "rx:          %s, LNA %d dB, PGA %d dB",
+		    gain_ctrl_is_manual(SX1255_RX) ? "manual" : "host",
+		    sx1255_get_gain(SX1255_GAIN_LNA), sx1255_get_gain(SX1255_GAIN_PGA));
+	shell_print(sh, "tx:          %s, DAC %d dB, MIXER %d dB",
+		    gain_ctrl_is_manual(SX1255_TX) ? "manual" : "host",
+		    sx1255_get_gain(SX1255_GAIN_DAC), sx1255_get_gain(SX1255_GAIN_MIXER));
+
+	return 0;
+}
+
+static int cmd_gain_mode(const struct shell *sh, size_t argc, char **argv)
+{
+	enum sx1255_dir dir;
+	bool manual;
+	int ret;
+
+	ARG_UNUSED(argc);
+
+	ret = check_hw(sh);
+	if (ret < 0) {
+		return ret;
+	}
+
+	if (strcmp(argv[1], "rx") == 0) {
+		dir = SX1255_RX;
+	} else if (strcmp(argv[1], "tx") == 0) {
+		dir = SX1255_TX;
+	} else {
+		shell_error(sh, "Usage: phenix gain mode <rx|tx> <host|manual>");
+		return -EINVAL;
+	}
+
+	if (strcmp(argv[2], "host") == 0) {
+		manual = false;
+	} else if (strcmp(argv[2], "manual") == 0) {
+		manual = true;
+	} else {
+		shell_error(sh, "Usage: phenix gain mode <rx|tx> <host|manual>");
+		return -EINVAL;
+	}
+
+	return gain_ctrl_set_manual(dir, manual);
+}
+
+static int cmd_gain_set(const struct shell *sh, size_t argc, char **argv)
+{
+	char *end;
+	long db;
+	int actual;
+	int ret;
+
+	ARG_UNUSED(argc);
+
+	ret = check_hw(sh);
+	if (ret < 0) {
+		return ret;
+	}
+
+	db = strtol(argv[2], &end, 10);
+	if (*argv[2] == '\0' || *end != '\0') {
+		shell_error(sh, "Invalid gain '%s'", argv[2]);
+		return -EINVAL;
+	}
+
+	for (int g = 0; g < SX1255_GAIN_COUNT; g++) {
+		if (strcasecmp(argv[1], sx1255_gain_name(g)) != 0) {
+			continue;
+		}
+		ret = gain_ctrl_set(g, (int)db, &actual);
+		if (ret == -EPERM) {
+			bool rx = (gain_ctrl_dir(g) == SX1255_RX);
+
+			shell_error(sh, "%s gain is set by the host; use 'phenix gain mode %s manual'",
+				    rx ? "RX" : "TX", rx ? "rx" : "tx");
+		} else if (ret < 0) {
+			shell_error(sh, "Failed (%d)", ret);
+		} else {
+			shell_print(sh, "%s gain set to %d dB", sx1255_gain_name(g), actual);
+		}
+		return ret;
+	}
+
+	shell_error(sh, "Usage: phenix gain set <lna|pga|dac|mixer> <dB>");
+	return -EINVAL;
+}
+
+SHELL_STATIC_SUBCMD_SET_CREATE(sub_gain,
+	SHELL_CMD(status, NULL, "Show gain source and gains", cmd_gain_status),
+	SHELL_CMD_ARG(mode, NULL, "Gain source: <rx|tx> <host|manual>", cmd_gain_mode, 3, 0),
+	SHELL_CMD_ARG(set, NULL, "Set a manual gain: <lna|pga|dac|mixer> <dB>", cmd_gain_set, 3,
+		      0),
+	SHELL_SUBCMD_SET_END);
+
 static int cmd_display_status(const struct shell *sh, size_t argc, char **argv)
 {
 	struct display_ui_info info;
@@ -350,6 +449,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(sub_phenix,
 	SHELL_CMD(status, NULL, "Show device status", cmd_status),
 	SHELL_CMD(config, &sub_config, "Persistent configuration", NULL),
 	SHELL_CMD(display, &sub_display, "Front panel display", cmd_display_status),
+	SHELL_CMD(gain, &sub_gain, "RX/TX gain source and manual gains", cmd_gain_status),
 	SHELL_CMD_ARG(led, NULL, "Set LED mode: <err|warn|ok> <off|on|slow|fast>", cmd_led, 3,
 		      0),
 	SHELL_SUBCMD_SET_END);
@@ -443,9 +543,11 @@ static int cmd_sx_reset(const struct shell *sh, size_t argc, char **argv)
 	ret = sx1255_init();
 	if (ret < 0) {
 		shell_error(sh, "Init failed (%d)", ret);
+		return ret;
 	}
+	gain_ctrl_apply();
 
-	return ret;
+	return 0;
 }
 
 static int cmd_sx_dump(const struct shell *sh, size_t argc, char **argv)

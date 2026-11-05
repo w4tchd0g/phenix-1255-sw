@@ -25,6 +25,7 @@ LOG_MODULE_REGISTER(config_store, LOG_LEVEL_INF);
 #define NET_RECORD_VERSION     1
 #define DISPLAY_RECORD_VERSION 1
 #define LINK_RECORD_VERSION    1
+#define GAIN_RECORD_VERSION    1
 
 /* On-flash layout of the network configuration, little endian */
 struct net_record {
@@ -53,6 +54,14 @@ struct display_record {
 #define DISPLAY_RECORD_V2      2
 #define DISPLAY_RECORD_V2_SIZE (sizeof(struct display_record) + 1U)
 
+/* On-flash layout of the gain settings */
+struct gain_record {
+	uint8_t version;
+	uint8_t rx_manual;
+	uint8_t tx_manual;
+	uint8_t db[PHENIX_GAIN_COUNT];
+} __packed;
+
 /* On-flash layout of the host link selection */
 struct link_record {
 	uint8_t version;
@@ -78,6 +87,7 @@ static void flash_caches_release(void)
 
 static struct phenix_net_cfg net_cfg;
 static struct phenix_display_cfg display_cfg;
+static struct phenix_gain_cfg gain_cfg;
 static enum phenix_host_link host_link;
 static enum phenix_host_link boot_link;
 static K_MUTEX_DEFINE(cfg_lock);
@@ -87,6 +97,17 @@ static void display_defaults(struct phenix_display_cfg *cfg)
 	cfg->contrast = PHENIX_DEFAULT_DISPLAY_CONTRAST;
 	cfg->dim_timeout_s = PHENIX_DEFAULT_DISPLAY_DIM_S;
 	cfg->auto_pages = PHENIX_DEFAULT_DISPLAY_AUTO_PAGES;
+}
+
+static void gain_defaults(struct phenix_gain_cfg *cfg)
+{
+	const struct phenix_gain_cfg defaults = {
+		.rx_manual = false,
+		.tx_manual = false,
+		.db = PHENIX_DEFAULT_GAIN_DB,
+	};
+
+	*cfg = defaults;
 }
 
 static bool display_cfg_valid(const struct phenix_display_cfg *cfg)
@@ -205,6 +226,33 @@ static int phenix_settings_set(const char *key, size_t len, settings_read_cb rea
 		return 0;
 	}
 
+	if (settings_name_steq(key, "gain", &next) && next == NULL) {
+		struct gain_record rec;
+		ssize_t rd;
+
+		if (len != sizeof(rec)) {
+			LOG_WRN("Stored gain settings have wrong size, ignored");
+			return 0;
+		}
+
+		rd = read_cb(cb_arg, &rec, sizeof(rec));
+		if (rd != sizeof(rec)) {
+			return (rd < 0) ? (int)rd : -EIO;
+		}
+
+		if (rec.version != GAIN_RECORD_VERSION) {
+			LOG_WRN("Stored gain settings version %u unsupported, ignored",
+				rec.version);
+			return 0;
+		}
+
+		/* Values out of range are clamped by the SX1255 driver when applied */
+		gain_cfg.rx_manual = rec.rx_manual != 0U;
+		gain_cfg.tx_manual = rec.tx_manual != 0U;
+		memcpy(gain_cfg.db, rec.db, sizeof(gain_cfg.db));
+		return 0;
+	}
+
 	if (settings_name_steq(key, "link", &next) && next == NULL) {
 		struct link_record rec;
 		ssize_t rd;
@@ -256,6 +304,7 @@ int config_store_init(bool factory_reset)
 
 	config_store_defaults(&net_cfg);
 	display_defaults(&display_cfg);
+	gain_defaults(&gain_cfg);
 	host_link = PHENIX_DEFAULT_HOST_LINK;
 	boot_link = host_link;
 
@@ -355,6 +404,39 @@ int config_store_set_display(const struct phenix_display_cfg *cfg)
 
 	if (ret < 0) {
 		LOG_ERR("Saving display settings failed (%d)", ret);
+	}
+
+	return ret;
+}
+
+void config_store_get_gain(struct phenix_gain_cfg *cfg)
+{
+	k_mutex_lock(&cfg_lock, K_FOREVER);
+	*cfg = gain_cfg;
+	k_mutex_unlock(&cfg_lock);
+}
+
+int config_store_set_gain(const struct phenix_gain_cfg *cfg)
+{
+	struct gain_record rec = {
+		.version = GAIN_RECORD_VERSION,
+		.rx_manual = cfg->rx_manual ? 1U : 0U,
+		.tx_manual = cfg->tx_manual ? 1U : 0U,
+	};
+	int ret;
+
+	memcpy(rec.db, cfg->db, sizeof(rec.db));
+
+	k_mutex_lock(&cfg_lock, K_FOREVER);
+	ret = settings_save_one("phenix/gain", &rec, sizeof(rec));
+	flash_caches_release();
+	if (ret == 0) {
+		gain_cfg = *cfg;
+	}
+	k_mutex_unlock(&cfg_lock);
+
+	if (ret < 0) {
+		LOG_ERR("Saving gain settings failed (%d)", ret);
 	}
 
 	return ret;

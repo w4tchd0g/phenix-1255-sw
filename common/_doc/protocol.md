@@ -80,7 +80,10 @@ Notes:
   streaming.
 - **SET_GAIN**: elements and ranges as in SoapySX: LNA 0..48 dB (6 dB steps),
   PGA 0..30 dB (2 dB), DAC 0..9 dB (3 dB), MIXER 0..30 dB (2 dB). The value is
-  clamped and quantized; the response contains the value applied.
+  clamped and quantized; the response contains the value applied. If the
+  gains of the direction are set manually on the device, the request is
+  answered with status OK and the manual value but not applied
+  ([radio.md](../../firmware/src/radio/_doc/radio.md#gain-source)).
 - **STREAM_RX / STREAM_TX**: the I2S interface and the sample counter start
   with the first stream that is enabled and stop when both are disabled. The
   counter restarts at 0 on every start. The response contains the counter

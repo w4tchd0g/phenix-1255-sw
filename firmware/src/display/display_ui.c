@@ -27,6 +27,7 @@
 #include "display/display_ui.h"
 #include "display/splash_logo.h"
 #include "ethernet/net_config.h"
+#include "radio/gain_ctrl.h"
 #include "radio/sx1255.h"
 #include "radio/sx1255_regs.h"
 #include "stream/sample_io.h"
@@ -121,6 +122,7 @@ static const char *const page_titles[PAGE_COUNT] = {
 };
 
 enum item {
+	ITEM_GAIN,
 	ITEM_DISPLAY,
 	ITEM_NETWORK,
 	ITEM_HOST_LINK,
@@ -136,10 +138,17 @@ enum item {
 	ITEM_NET_GW,
 	ITEM_NET_DNS,
 	ITEM_NET_SAVE,
+	ITEM_RX_MODE,
+	ITEM_LNA,
+	ITEM_PGA,
+	ITEM_TX_MODE,
+	ITEM_DAC,
+	ITEM_MIXER,
 	ITEM_BACK,
 };
 
 static const char *const item_labels[] = {
+	[ITEM_GAIN] = "RF gain",
 	[ITEM_DISPLAY] = "Display",     [ITEM_NETWORK] = "Network",
 	[ITEM_HOST_LINK] = "Host link",
 	[ITEM_ABOUT] = "About",         [ITEM_REBOOT] = "Reboot",
@@ -149,20 +158,27 @@ static const char *const item_labels[] = {
 	[ITEM_NET_MODE] = "Mode",
 	[ITEM_NET_IP] = "IP",           [ITEM_NET_MASK] = "Mask",
 	[ITEM_NET_GW] = "GW",           [ITEM_NET_DNS] = "DNS",
-	[ITEM_NET_SAVE] = "Save+reboot", [ITEM_BACK] = "Back",
+	[ITEM_NET_SAVE] = "Save+reboot",
+	[ITEM_RX_MODE] = "RX gain",     [ITEM_LNA] = "LNA",
+	[ITEM_PGA] = "PGA",             [ITEM_TX_MODE] = "TX gain",
+	[ITEM_DAC] = "DAC",             [ITEM_MIXER] = "Mixer",
+	[ITEM_BACK] = "Back",
 };
 
 enum menu_id {
 	MENU_MAIN,
 	MENU_DISPLAY,
 	MENU_NETWORK,
+	MENU_GAIN,
 };
 
-static const uint8_t main_items[] = {ITEM_DISPLAY, ITEM_NETWORK,       ITEM_HOST_LINK, ITEM_ABOUT,
-				     ITEM_REBOOT,  ITEM_FACTORY_RESET, ITEM_BACK};
+static const uint8_t main_items[] = {ITEM_GAIN,  ITEM_DISPLAY, ITEM_NETWORK,       ITEM_HOST_LINK,
+				     ITEM_ABOUT, ITEM_REBOOT,  ITEM_FACTORY_RESET, ITEM_BACK};
 static const uint8_t display_items[] = {ITEM_CONTRAST, ITEM_DIM, ITEM_AUTO_PAGES, ITEM_BACK};
 static const uint8_t network_items[] = {ITEM_NET_MODE, ITEM_NET_IP,  ITEM_NET_MASK, ITEM_NET_GW,
 					ITEM_NET_DNS,  ITEM_NET_SAVE, ITEM_BACK};
+static const uint8_t gain_items[] = {ITEM_RX_MODE, ITEM_LNA,   ITEM_PGA,  ITEM_TX_MODE,
+				     ITEM_DAC,     ITEM_MIXER, ITEM_BACK};
 
 struct menu {
 	const char *title;
@@ -174,7 +190,20 @@ static const struct menu menus[] = {
 	[MENU_MAIN] = {"MENU", main_items, ARRAY_SIZE(main_items)},
 	[MENU_DISPLAY] = {"DISPLAY", display_items, ARRAY_SIZE(display_items)},
 	[MENU_NETWORK] = {"NETWORK", network_items, ARRAY_SIZE(network_items)},
+	[MENU_GAIN] = {"RF GAIN", gain_items, ARRAY_SIZE(gain_items)},
 };
+
+/* Position of an entry in a menu, to return to it from a submenu */
+static int menu_index(enum menu_id menu, enum item item)
+{
+	for (int i = 0; i < menus[menu].count; i++) {
+		if (menus[menu].items[i] == item) {
+			return i;
+		}
+	}
+
+	return 0;
+}
 
 enum confirm {
 	CONFIRM_REBOOT,
@@ -489,10 +518,11 @@ static void draw_page_rf(void)
 
 	sx1255_get_mode(&rx_on, &tx_on, &tx_drv);
 
-	line(0, "LNA %2d dB  PGA %2d dB", sx1255_get_gain(SX1255_GAIN_LNA),
-	     sx1255_get_gain(SX1255_GAIN_PGA));
-	line(1, "DAC %2d dB  MIX %2d dB", sx1255_get_gain(SX1255_GAIN_DAC),
-	     sx1255_get_gain(SX1255_GAIN_MIXER));
+	/* Gains in dB, with the gain source of the direction */
+	line(0, "RX %-4s LNA %2d PGA %2d", gain_ctrl_is_manual(SX1255_RX) ? "man" : "host",
+	     sx1255_get_gain(SX1255_GAIN_LNA), sx1255_get_gain(SX1255_GAIN_PGA));
+	line(1, "TX %-4s DAC %2d MIX %2d", gain_ctrl_is_manual(SX1255_TX) ? "man" : "host",
+	     sx1255_get_gain(SX1255_GAIN_DAC), sx1255_get_gain(SX1255_GAIN_MIXER));
 	line(2, "RX input  %s",
 	     (sx1255_get_rx_input() == SX1255_RX_INPUT_LOOPBACK) ? "loopback" : "antenna");
 	line(3, "TX driver %s", tx_drv ? "on" : "off");
@@ -592,6 +622,21 @@ static uint8_t *item_ipv4(enum item item)
 	}
 }
 
+static enum sx1255_gain item_gain(enum item item)
+{
+	switch (item) {
+	case ITEM_LNA:
+		return SX1255_GAIN_LNA;
+	case ITEM_PGA:
+		return SX1255_GAIN_PGA;
+	case ITEM_DAC:
+		return SX1255_GAIN_DAC;
+	case ITEM_MIXER:
+	default:
+		return SX1255_GAIN_MIXER;
+	}
+}
+
 static int dim_option_index(uint16_t seconds)
 {
 	for (int i = 0; i < ARRAY_SIZE(dim_options_s); i++) {
@@ -608,10 +653,23 @@ static void item_value(enum item item, char *buf, size_t len)
 	buf[0] = '\0';
 
 	switch (item) {
+	case ITEM_GAIN:
 	case ITEM_DISPLAY:
 	case ITEM_NETWORK:
 	case ITEM_ABOUT:
 		snprintf(buf, len, ">");
+		break;
+	case ITEM_RX_MODE:
+		snprintf(buf, len, "%s", gain_ctrl_is_manual(SX1255_RX) ? "Manual" : "Host");
+		break;
+	case ITEM_TX_MODE:
+		snprintf(buf, len, "%s", gain_ctrl_is_manual(SX1255_TX) ? "Manual" : "Host");
+		break;
+	case ITEM_LNA:
+	case ITEM_PGA:
+	case ITEM_DAC:
+	case ITEM_MIXER:
+		snprintf(buf, len, "%d dB", sx1255_get_gain(item_gain(item)));
 		break;
 	case ITEM_CONTRAST:
 		snprintf(buf, len, "%u", ui.cfg.contrast);
@@ -799,15 +857,20 @@ static void menu_back(void)
 	switch (ui.menu) {
 	case MENU_DISPLAY:
 		save_display_cfg(false);
-		open_menu(MENU_MAIN, 0);
+		open_menu(MENU_MAIN, menu_index(MENU_MAIN, ITEM_DISPLAY));
 		break;
 	case MENU_NETWORK:
 		if (ui.net_dirty) {
 			ui.net_dirty = false;
-			show_message("NETWORK", "Changes discarded.", MENU_MAIN, 1);
+			show_message("NETWORK", "Changes discarded.", MENU_MAIN,
+				     menu_index(MENU_MAIN, ITEM_NETWORK));
 		} else {
-			open_menu(MENU_MAIN, 1);
+			open_menu(MENU_MAIN, menu_index(MENU_MAIN, ITEM_NETWORK));
 		}
+		break;
+	case MENU_GAIN:
+		/* Gain changes are saved by gain_ctrl */
+		open_menu(MENU_MAIN, menu_index(MENU_MAIN, ITEM_GAIN));
 		break;
 	case MENU_MAIN:
 	default:
@@ -822,6 +885,29 @@ static void menu_select(enum item item)
 	const char *reason;
 
 	switch (item) {
+	case ITEM_GAIN:
+		open_menu(MENU_GAIN, 0);
+		break;
+	case ITEM_RX_MODE:
+		(void)gain_ctrl_set_manual(SX1255_RX, !gain_ctrl_is_manual(SX1255_RX));
+		break;
+	case ITEM_TX_MODE:
+		(void)gain_ctrl_set_manual(SX1255_TX, !gain_ctrl_is_manual(SX1255_TX));
+		break;
+	case ITEM_LNA:
+	case ITEM_PGA:
+	case ITEM_DAC:
+	case ITEM_MIXER:
+		if (gain_ctrl_is_manual(gain_ctrl_dir(item_gain(item)))) {
+			ui.editing = true;
+		} else {
+			show_message("RF GAIN",
+				     (gain_ctrl_dir(item_gain(item)) == SX1255_RX)
+					     ? "Set by the host. Switch RX gain to Manual."
+					     : "Set by the host. Switch TX gain to Manual.",
+				     MENU_GAIN, ui.sel);
+		}
+		break;
 	case ITEM_DISPLAY:
 		open_menu(MENU_DISPLAY, 0);
 		break;
@@ -891,6 +977,19 @@ static void menu_adjust(enum item item, int delta, bool fast)
 		ui.cfg.dim_timeout_s = dim_options_s[val];
 		ui.cfg_dirty = true;
 		break;
+	case ITEM_LNA:
+	case ITEM_PGA:
+	case ITEM_DAC:
+	case ITEM_MIXER: {
+		enum sx1255_gain g = item_gain(item);
+
+		/* Ends editing if the gain source was switched meanwhile (console) */
+		if (gain_ctrl_set(g, sx1255_get_gain(g) + delta * sx1255_gain_range(g)->step_db,
+				  NULL) == -EPERM) {
+			ui.editing = false;
+		}
+		break;
+	}
 	case ITEM_NET_MASK:
 		set_netmask_prefix(ui.net.netmask,
 				   CLAMP(netmask_prefix(ui.net.netmask) + delta, 1, 30));

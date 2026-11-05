@@ -25,6 +25,7 @@ target_sources(app PRIVATE
   src/ethernet/net_config.c
   src/ethernet/transport_eth.c
   src/ethernet/web_ui.c
+  src/radio/gain_ctrl.c
   src/radio/sx1255.c
   src/shell/shell_commands.c
   src/stream/sample_io.c

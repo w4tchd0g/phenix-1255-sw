@@ -17,6 +17,7 @@
 #include "ethernet/net_config.h"
 #include "ethernet/transport_eth.h"
 #include "ethernet/web_ui.h"
+#include "radio/gain_ctrl.h"
 #include "radio/sx1255.h"
 #include "stream/sample_io.h"
 #include "stream/stream.h"
@@ -83,6 +84,7 @@ int main(void)
 		LOG_ERR("SX1255 init failed (%d)", ret);
 		board_led_set(BOARD_LED_ERR, BOARD_LED_ON);
 	}
+	gain_ctrl_init();
 
 	ret = stream_init();
 	if (ret < 0) {

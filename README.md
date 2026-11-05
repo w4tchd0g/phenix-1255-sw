@@ -102,6 +102,9 @@ an exact sample. Details: [architecture.md](_doc/architecture.md).
 - SX1255 with 38.4 MHz reference, independent RX and TX synthesizers.
 - Sample counter derived from the SAI DMA position; every RX packet carries
   its counter value, timed TX packets are emitted exactly at their sample.
+- RX and TX gains set by the host software (e.g. FlowStation) or manually on
+  the device, selectable per direction (see
+  [radio.md](firmware/src/radio/_doc/radio.md#gain-source)).
 - Constant TX-to-RX loop delay per rate (see
   [stream.md](firmware/src/stream/_doc/stream.md#tx-to-rx-loop-delay)).
 
@@ -122,7 +125,7 @@ an exact sample. Details: [architecture.md](_doc/architecture.md).
 **Front panel**
 - 0.96" SSD1306 OLED with status pages (frequencies, link, network, gains,
   counters) and a menu operated with three buttons (Left, OK, Right) for
-  display, network, host link, reboot and factory reset settings.
+  RF gain, display, network, host link, reboot and factory reset settings.
 
 **Host software**
 - SoapySDR module for Linux and macOS: timestamps on every read, exact timed
@@ -254,7 +257,9 @@ All arguments are listed in [soapy.md](soapy/_doc/soapy.md#device-arguments).
 
 Both stations open SoapySDR devices and detect the Phenix-1255 by its driver
 key once the patch from [`patches/`](patches/_doc/patches.md) is applied. The
-patch sets the sample rate (600 kHz), antennas and gains.
+patch sets the sample rate (600 kHz), antennas and gains. To set the gains
+on the device instead, switch *RX gain* and/or *TX gain* to Manual in the
+*RF gain* menu; the station's gain settings are then ignored.
 
 <details open>
 <summary><b>FlowStation</b></summary>
@@ -324,6 +329,7 @@ as well.
 |---|---|
 | `phenix status` | Host link in use (and the stored one until the reboot), PA state |
 | `sx1255 info` | Frequencies, sample rate, gains, PLL lock, RX input |
+| `phenix gain` | Gain source (host or manual) and gains of RX and TX |
 | `stream status` | Sample counter, dropped RX samples, late/early TX packets, FIFO and frame sync errors |
 | `stream rxstats` | RX level, DC offset and dominant tone of the received signal (while a stream runs) |
 | `phenix config show` | Stored network configuration and host link |

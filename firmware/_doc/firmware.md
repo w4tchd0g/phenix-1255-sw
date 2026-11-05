@@ -24,7 +24,7 @@ firmware/
 |---|---|---|---|
 | `board/` | `board_io.c`, `hw_id.c`, `watchdog.c` | Hardware variant (HW_ID jumpers), status LEDs, PA enable, factory reset button, hardware watchdog | [board.md](../src/board/_doc/board.md) |
 | `config/` | `config_store.c` | Persistent network, host link and display settings (NVS) | [config.md](../src/config/_doc/config.md) |
-| `radio/` | `sx1255.c`, `sx1255_regs.h` | SX1255 over SPI: frequencies, gains, sample rate, modes | [radio.md](../src/radio/_doc/radio.md) |
+| `radio/` | `sx1255.c`, `sx1255_regs.h`, `gain_ctrl.c` | SX1255 over SPI: frequencies, gains, sample rate, modes; gain source host or manual | [radio.md](../src/radio/_doc/radio.md) |
 | `stream/` | `stream.c`, `sample_io.c` | SAI1 and eDMA, sample counter, RX pump, TX ingest | [stream.md](../src/stream/_doc/stream.md) |
 | `control/` | `control.c` | Host session and control commands, independent of the transport | [control.md](../src/control/_doc/control.md) |
 | `ethernet/` | `transport_eth.c`, `net_config.c`, `web_ui.c` | TCP/UDP transport, addressing, mDNS, web interface | [ethernet.md](../src/ethernet/_doc/ethernet.md) |
@@ -45,8 +45,8 @@ protocol shared with the host is in
    hardware the start-up stops here; only the console runs, the front panel
    shows an error screen and the red LED of the FRDM-MCXN947 blinks
    ([board.md](../src/board/_doc/board.md#hardware-variant)).
-3. Board I/O, watchdog (LED0 blinks slowly after a watchdog reset), factory reset check (SW2), settings, SX1255 (433.92 MHz, 600 kHz),
-   stream, control and RX pump.
+3. Board I/O, watchdog (LED0 blinks slowly after a watchdog reset), factory reset check (SW2), settings, SX1255 (433.92 MHz, 600 kHz,
+   manual gains if selected), stream, control and RX pump.
 4. Ethernet is always configured and the web interface and the front panel
    are started, independent of the host link.
 5. Depending on the stored host link (default HS USB,

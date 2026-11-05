@@ -31,6 +31,11 @@
 #define PHENIX_DEFAULT_DISPLAY_DIM_S            300
 #define PHENIX_DEFAULT_DISPLAY_AUTO_PAGES       true
 
+/* Gain elements in the order LNA, PGA (RX), DAC, MIXER (TX) */
+#define PHENIX_GAIN_COUNT 4
+/* Manual gains before the first switch to manual, as in the FlowStation patch */
+#define PHENIX_DEFAULT_GAIN_DB {42, 16, 9, 30}
+
 /* Host link for the control channel and the sample stream */
 #define PHENIX_DEFAULT_HOST_LINK PHENIX_LINK_USB
 
@@ -67,6 +72,14 @@ struct phenix_display_cfg {
 	bool auto_pages;
 };
 
+struct phenix_gain_cfg {
+	/* Gains of the direction are set on the device, host requests are ignored */
+	bool rx_manual;
+	bool tx_manual;
+	/* Manual gains in dB, LNA, PGA, DAC, MIXER */
+	uint8_t db[PHENIX_GAIN_COUNT];
+};
+
 /**
  * Initialize the settings backend and load the stored configuration.
  *
@@ -86,6 +99,14 @@ void config_store_get_display(struct phenix_display_cfg *cfg);
 
 /** Validate and persist the display settings. */
 int config_store_set_display(const struct phenix_display_cfg *cfg);
+
+void config_store_get_gain(struct phenix_gain_cfg *cfg);
+
+/**
+ * Persist the gain settings. Locks interrupts while the flash is written;
+ * not to be called while a stream runs unless the device reboots anyway.
+ */
+int config_store_set_gain(const struct phenix_gain_cfg *cfg);
 
 /** Host link loaded at boot; the transports are started for this link. */
 enum phenix_host_link config_store_boot_link(void);

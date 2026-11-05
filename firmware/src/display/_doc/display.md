@@ -84,7 +84,7 @@ by hand.
 |---|---|
 | STATUS | RX and TX frequency (exact synthesizer value), sample rate, PLL lock, host session, late TX packets and dropped RX samples |
 | NETWORK | Current IP address and its source, MAC address, control and sample port, host link in use (`Link USB, reboot: ETH` while a changed link waits for the reboot) |
-| RF | LNA, PGA, DAC and mixer gain, RX input, TX driver, PA, SX1255 state |
+| RF | Gain source (`host`/`man`) and gains of RX (LNA, PGA) and TX (DAC, MIX) in dB, RX input, TX driver, PA, SX1255 state |
 | STREAM | Sample counter, RX/TX packet counters, late/early TX packets, SAI FIFO and frame sync errors |
 | SYSTEM | Firmware and Zephyr version, uptime, last reset cause, serial number |
 | HARDWARE | Hardware variant and HW_ID jumpers ([board.md](../../board/_doc/board.md#hardware-variant)) |
@@ -116,6 +116,11 @@ automatic change for 60 s.
 
 ```
 MENU
+ ├─ RF gain
+ │   ├─ RX gain      Host (default) / Manual
+ │   ├─ LNA, PGA     0..48 dB in 6 dB, 0..30 dB in 2 dB steps (Manual only)
+ │   ├─ TX gain      Host (default) / Manual
+ │   └─ DAC, Mixer   0..9 dB in 3 dB, 0..30 dB in 2 dB steps (Manual only)
  ├─ Display
  │   ├─ Brightness   1..10 (default 8)
  │   ├─ Dim after    never, 1, 2, 5 (default), 10, 30, 60 min
@@ -130,6 +135,12 @@ MENU
  └─ Factory reset    asks twice, erases all settings and reboots
 ```
 
+- *RX gain* and *TX gain* switch the gain source with OK; switching to
+  Manual takes over the gains in use. Gains are editable only in Manual and
+  take effect at once, also while a stream runs; in Host mode OK on a gain
+  shows a hint. What the four elements do:
+  [radio.md](../../radio/_doc/radio.md#gains); saving and the behaviour
+  towards the host: [radio.md](../../radio/_doc/radio.md#gain-source).
 - Display settings take effect at once and are saved when leaving the
   Display menu (or when the menu times out). While a stream runs, saving is
   deferred until it stops, because flash writes lock interrupts and would

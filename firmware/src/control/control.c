@@ -17,6 +17,7 @@
 #include "board/board_io.h"
 #include "config/config_store.h"
 #include "control/control.h"
+#include "radio/gain_ctrl.h"
 #include "radio/sx1255.h"
 #include "radio/sx1255_regs.h"
 #include "stream/sample_io.h"
@@ -263,6 +264,7 @@ static void dispatch(uint8_t op, uint16_t seq, const uint8_t *p, size_t len)
 		if (transport->set_rx_port != NULL) {
 			transport->set_rx_port(sys_le16_to_cpu(req.rx_udp_port));
 		}
+		gain_ctrl_session_start();
 		fill_info(&r.info);
 		rlen = sizeof(r.info);
 		break;
@@ -319,8 +321,8 @@ static void dispatch(uint8_t op, uint16_t seq, const uint8_t *p, size_t len)
 			st = PHX_EINVAL;
 			break;
 		}
-		st = sx1255_set_gain((enum sx1255_gain)req.element,
-				     (int16_t)sys_le16_to_cpu((uint16_t)req.gain_db), &actual);
+		st = gain_ctrl_host_set((enum sx1255_gain)req.element,
+					(int16_t)sys_le16_to_cpu((uint16_t)req.gain_db), &actual);
 		r.gain.gain_db = (int16_t)sys_cpu_to_le16((uint16_t)actual);
 		rlen = sizeof(r.gain);
 		break;
@@ -515,7 +517,10 @@ void control_reboot(bool factory_reset)
 	stream_stop();
 	board_pa_set(false);
 
-	if (factory_reset) {
+	if (!factory_reset) {
+		/* Gain changes are saved with a delay; the reboot would drop them */
+		gain_ctrl_flush();
+	} else {
 		ret = config_store_erase();
 		if (ret < 0) {
 			LOG_ERR("Erasing settings partition failed (%d)", ret);

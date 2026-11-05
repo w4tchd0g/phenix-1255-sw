@@ -24,6 +24,7 @@
 #include "control/control.h"
 #include "ethernet/net_config.h"
 #include "ethernet/web_ui.h"
+#include "radio/gain_ctrl.h"
 #include "radio/sx1255.h"
 #include "stream/stream.h"
 
@@ -144,6 +145,12 @@ static void render_status(void)
 	out("<tr><td>SX1255</td><td>%s</td></tr>", sx1255_is_ready() ? "ready" : "not ready");
 	out("<tr><td>Streaming</td><td>%s%s, %u S/s</td></tr>", st.running ? "running" : "stopped",
 	    st.tx_enabled ? ", TX on" : "", sx1255_get_sample_rate());
+	out("<tr><td>RX gain</td><td>%s: LNA %d dB, PGA %d dB</td></tr>",
+	    gain_ctrl_is_manual(SX1255_RX) ? "manual" : "host", sx1255_get_gain(SX1255_GAIN_LNA),
+	    sx1255_get_gain(SX1255_GAIN_PGA));
+	out("<tr><td>TX gain</td><td>%s: DAC %d dB, MIXER %d dB</td></tr>",
+	    gain_ctrl_is_manual(SX1255_TX) ? "manual" : "host", sx1255_get_gain(SX1255_GAIN_DAC),
+	    sx1255_get_gain(SX1255_GAIN_MIXER));
 	out("<tr><td>PA</td><td>%s</td></tr>", board_pa_is_enabled() ? "on" : "off");
 	out("<tr><td>Last reset</td><td>%s</td></tr>", watchdog_reset_cause());
 	out("</table>");
@@ -215,6 +222,8 @@ static void render_json(void)
 	    "\"host_link\":\"%s\",\"host_link_saved\":\"%s\","
 	    "\"session\":%s,\"address\":\"%s\",\"address_mode\":\"%s\","
 	    "\"sx1255_ready\":%s,\"streaming\":%s,\"tx_enabled\":%s,\"pa\":%s,"
+	    "\"rx_gain_mode\":\"%s\",\"tx_gain_mode\":\"%s\","
+	    "\"lna\":%d,\"pga\":%d,\"dac\":%d,\"mixer\":%d,"
 	    "\"sample_rate\":%u,\"counter\":%llu,\"tx_late\":%u,\"tx_early\":%u,"
 	    "\"fifo_errors\":%u,\"last_reset\":\"%s\"}\n",
 	    APP_VERSION_EXTENDED_STRING, serial, hw_id_name(), hw_id_get(),
@@ -223,7 +232,11 @@ static void render_json(void)
 	    control_session_active() ? "true" : "false", addr, net_config_get_mode(),
 	    sx1255_is_ready() ? "true" : "false", st.running ? "true" : "false",
 	    st.tx_enabled ? "true" : "false", board_pa_is_enabled() ? "true" : "false",
-	    sx1255_get_sample_rate(), st.counter, st.tx_late, st.tx_early,
+	    gain_ctrl_is_manual(SX1255_RX) ? "manual" : "host",
+	    gain_ctrl_is_manual(SX1255_TX) ? "manual" : "host", sx1255_get_gain(SX1255_GAIN_LNA),
+	    sx1255_get_gain(SX1255_GAIN_PGA), sx1255_get_gain(SX1255_GAIN_DAC),
+	    sx1255_get_gain(SX1255_GAIN_MIXER), sx1255_get_sample_rate(), st.counter, st.tx_late,
+	    st.tx_early,
 	    st.rx_fifo_errors + st.tx_fifo_errors, watchdog_reset_cause());
 }
 

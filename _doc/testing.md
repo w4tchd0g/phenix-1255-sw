@@ -108,6 +108,7 @@ Expected results:
 | Auto repeat | In *Network*, Mode static, edit *IP* and hold Right | Octet steps after 0.5 s every 100 ms and after 2 s by 10; long press of OK leaves editing, leaving the menu discards the change |
 | Confirmation | Open *Reboot*, press Right twice, then Left, then long press of OK | *Yes* stays selected on the second Right, Left selects *No*, the long press cancels without a reboot |
 | Host link pending | `phenix config set link ethernet` (on HS USB), check the NETWORK page and the web interface; `phenix config set link usb` | `Link USB, reboot: ETH` on the display, `HS USB (Ethernet after reboot)` in `phenix status` and the web interface; back to `HS USB` after the second command |
+| Gain source | *RF gain*: switch *RX gain* to Manual, change LNA, wait 3 s, reboot; run `phx_soapy_test rx`; switch back to Host | Manual takes over the gains in use; the gain is kept after the reboot (`phenix gain`, RF page `RX man`); during the test the LNA stays at the manual value, the console logs `RX gain is manual, host gain requests are ignored` once, test `PASS` |
 | About | Select *About*, `phenix display dump`, any input | Logo, firmware version and hardware variant; returns to the *About* entry |
 | Dimming | Set *Dim after* to 1 min, wait | `phenix display` reports `(dimmed)`; the first input only wakes the display |
 | No display | Disconnect the display, reboot | `Display not ready, front panel disabled`, streaming unaffected |

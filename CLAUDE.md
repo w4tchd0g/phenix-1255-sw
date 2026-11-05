@@ -184,7 +184,7 @@ must not be changed without a hardware test.
   caches off until reset (Ethernet streaming then loses ~60 % of RX samples).
   `config/config_store.c` clears them after every flash operation; any new flash
   write must do the same. Flash operations lock interrupts, so runtime saves
-  (display settings) are deferred while a stream runs.
+  (display and gain settings) are deferred while a stream runs.
 - **LPI2C3 (OLED):** needs `bus-idle-timeout` in the devicetree, otherwise the
   bus busy flag stays set after boot and every transfer fails (scan finds
   nothing). Module labels give 8-bit addresses (0x78/0x7A); the panel answers

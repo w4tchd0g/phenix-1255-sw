@@ -1,7 +1,7 @@
 # Persistent configuration
 
-`config_store.c` stores the network, host link and display settings with
-the Zephyr settings subsystem (NVS backend) in a dedicated 64 KB internal
+`config_store.c` stores the network, host link, gain and display settings
+with the Zephyr settings subsystem (NVS backend) in a dedicated 64 KB internal
 flash partition at 0x1F0000 ([firmware.md](../../../_doc/firmware.md#flash)).
 
 ## Settings
@@ -10,11 +10,13 @@ flash partition at 0x1F0000 ([firmware.md](../../../_doc/firmware.md#flash)).
 |---|---|---|
 | `phenix/net` | DHCP on/off, static address, netmask, gateway, DNS, control port, sample port | [ethernet.md](../../ethernet/_doc/ethernet.md) (web interface, console), front panel menu |
 | `phenix/link` | Host link: HS USB or Ethernet | [Host link](#host-link) |
+| `phenix/gain` | Gain source RX and TX (host/manual), manual LNA, PGA, DAC and MIXER gain | [radio.md](../../radio/_doc/radio.md#gain-source) |
 | `phenix/display` | Brightness, dim timeout, auto pages | [display.md](../../display/_doc/display.md) |
 
 Factory defaults: DHCP on, fallback/static address 192.168.2.10/24, no
 gateway and DNS, control port 1255/TCP, sample port 1256/UDP; host link
-HS USB; brightness 8, dim after 5 min, auto pages on.
+HS USB; RX and TX gains set by the host; brightness 8, dim after 5 min,
+auto pages on.
 
 - Every network configuration is validated (`config_store_validate()`)
   before it is stored, and again when it is loaded; an invalid stored record
@@ -62,5 +64,5 @@ flash write must do the same.
 
 The driver also locks interrupts while it programs or erases, so settings are
 written at runtime only when no stream runs or the device reboots
-afterwards. Display settings changed during a stream are saved when it
-stops.
+afterwards. Display and gain settings changed during a stream are saved
+when it stops.
