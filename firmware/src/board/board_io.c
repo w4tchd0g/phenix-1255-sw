@@ -42,14 +42,14 @@ LOG_MODULE_REGISTER(board_io, LOG_LEVEL_INF);
 #define PA_EN_PIN   DT_GPIO_PIN(USER_NODE, pa_en_gpios)
 #define PA_EN_FLAGS DT_GPIO_FLAGS(USER_NODE, pa_en_gpios)
 
-BUILD_ASSERT(DT_SAME_NODE(PA_EN_CTLR, DT_NODELABEL(gpio2)),
-	     "pa_en_early_off() enables the GPIO2 clock only");
+BUILD_ASSERT(DT_SAME_NODE(PA_EN_CTLR, DT_NODELABEL(gpio1)),
+	     "pa_en_early_off() enables the GPIO1 clock only");
 
 static int pa_en_early_off(void)
 {
 	GPIO_Type *gpio = (GPIO_Type *)DT_REG_ADDR(PA_EN_CTLR);
 
-	CLOCK_EnableClock(kCLOCK_Gpio2);
+	CLOCK_EnableClock(kCLOCK_Gpio1);
 
 	if (PA_EN_FLAGS & GPIO_ACTIVE_LOW) {
 		gpio->PSOR = BIT(PA_EN_PIN);

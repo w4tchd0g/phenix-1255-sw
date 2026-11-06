@@ -47,7 +47,7 @@
 
 	zephyr,user {
 		/* Gate of the P-MOSFET switching VBAT3 to the SX1255 PA */
-		pa-en-gpios = <&gpio2 4 GPIO_ACTIVE_LOW>;
+		pa-en-gpios = <&gpio1 23 GPIO_ACTIVE_LOW>;
 		/* SW2, held during boot = factory reset */
 		factory-reset-gpios = <&gpio0 23 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
 		/*
@@ -56,7 +56,7 @@
 		 */
 		hw-id-gpios = <&gpio3 5 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>,
 			      <&gpio3 4 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>,
-			      <&gpio4 4 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>;
+			      <&gpio1 19 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>;
 	};
 
 	/*

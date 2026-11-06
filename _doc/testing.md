@@ -33,9 +33,9 @@ dummy load on the TX output and on the PA output.
 | Boot | Power on, watch the console | No errors in the boot log; `phenix status` shows `hardware: base (HW_ID2..0 = 000)`, `pa: disabled` and `host link: HS USB` (factory default) |
 | Unsupported hardware | Connect P3_5 (HW_ID0) to +3V3, reset; remove the connection afterwards | Console repeats `Unsupported hardware: HW_ID2..0 = 001` every 5 s, red FRDM LED blinks fast, no LED of phenix-1255-hw lit, display shows `HARDWARE ERROR` and `HW ID 1 (001)`, no network or USB device; `phenix status` shows `start-up: halted`, `sx1255` commands are refused |
 | SX1255 | `sx1255 info` | Version read back, reference 38400000 Hz, RX and TX PLL locked |
-| PA off at idle | Measure P2_4 and the PA supply (VBAT3 after the MOSFET) after boot | P2_4 high, PA supply off |
+| PA off at idle | Measure P1_23 (J9-23) and the PA supply (VBAT3 after the MOSFET) after boot | P1_23 high, PA supply off |
 | PA off in reset | Hold the reset button; halt the MCU with the debugger | PA supply stays off (gate pull-up) |
-| PA on with TX (*transmits*) | Run `phx_soapy_test tone`, measure as above | P2_4 low and PA supply on during the test, `phenix status` shows `pa: enabled`; PA supply off after the test |
+| PA on with TX (*transmits*) | Run `phx_soapy_test tone`, measure as above | P1_23 low and PA supply on during the test, `phenix status` shows `pa: enabled`; PA supply off after the test |
 | PA shutdown paths (*transmits*) | Repeat the rows of [Link loss and safety](#link-loss-and-safety) that end with "PA off", measuring the PA supply | PA supply off at the time stated there |
 | Status LEDs | `phenix led <err\|warn\|ok> on`, then `off`, for each LED; reboot afterwards | Each command lights the LED of the colour given in [board.md](../firmware/src/board/_doc/board.md#status-leds) |
 | LED states | Boot without host, then connect a host | Green blinks slowly, then lights steadily |

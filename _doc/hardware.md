@@ -41,14 +41,14 @@ web interface and takes effect after a reboot
 | DIO0 | P0_28 | GPIO input | |
 | DIO1 | P0_30 | GPIO input | |
 | DIO3 | P0_19 | GPIO input | |
-| PA_EN | P2_4 | GPIO output, active low | P-MOSFET gate, switches VBAT3 |
+| PA_EN | P1_23 (J9-23) | GPIO output, active low | P-MOSFET gate, switches VBAT3 |
 | LED0 (red, ERR) | P0_14 | GPIO output, active high | |
 | LED1 (yellow, WARN/INFO) | P0_22 | GPIO output, active high | |
 | LED2 (green, OK) | P0_15 | GPIO output, active high | |
 | FACTORY_RST (SW2) | P0_23 | GPIO input, pull-up, active low | Held during boot = factory reset |
 | HW_ID0 | P3_5 | GPIO input, internal pull-down | Not connected on phenix-1255-hw (reads 0); reserved for a solder jumper to +3V3 on later boards, bit 0 of the hardware ID |
 | HW_ID1 | P3_4 | GPIO input, internal pull-down | Not connected on phenix-1255-hw (reads 0); reserved for a solder jumper to +3V3 on later boards, bit 1 of the hardware ID |
-| HW_ID2 | P4_4 | GPIO input, internal pull-down | Not connected on phenix-1255-hw (reads 0); reserved for a solder jumper to +3V3 on later boards, bit 2 of the hardware ID |
+| HW_ID2 | P1_19 (J9-5) | GPIO input, internal pull-down | Not connected on phenix-1255-hw (reads 0); reserved for a solder jumper to +3V3 on later boards, bit 2 of the hardware ID |
 | FRDM red LED | P0_10 | GPIO output, active low | On the FRDM-MCXN947; blinks fast on unsupported hardware |
 | OLED SDA | P1_0 | LPI2C3 SDA (FC3_P0) | Front panel display, see [display.md](../firmware/src/display/_doc/display.md) |
 | OLED SCL | P1_1 | LPI2C3 SCL (FC3_P1) | |
