@@ -27,31 +27,34 @@ web interface and takes effect after a reboot
 
 ## Pin assignment
 
-| Signal | MCU pin | Function | Notes |
+Header pins are those of the FRDM-MCXN947 with its solder jumpers (SJ) in
+the default position.
+
+| Signal | MCU pin (FRDM header pin) | Function | Notes |
 |---|---|---|---|
-| CK_OUT | P3_18 | SAI1_RX_BCLK | I2S bit clock from the SX1255 |
-| DIO2 / WS | P3_19 | SAI1_RX_FS | I2S frame sync from the SX1255 |
-| I_OUT | P3_21 | SAI1_RXD0 | RX samples |
-| I_IN | P3_20 | SAI1_TXD0 | TX samples |
-| SCK | P0_25 | LPSPI1 SCK (FC1_P1) | |
-| SDI (MOSI) | P0_24 | LPSPI1 SDO (FC1_P0) | |
-| SDO (MISO) | P0_26 | LPSPI1 SDI (FC1_P2) | |
-| NSS | P0_31 | GPIO chip select, active low | Hardware PCS on P0_27 is not used (on-board green LED) |
-| RESET | P0_29 | GPIO | Idle high impedance, pulse high >= 100 us |
-| DIO0 | P0_28 | GPIO input | |
-| DIO1 | P0_30 | GPIO input | |
-| DIO3 | P0_19 | GPIO input | |
-| PA_EN | P1_23 (J9-23) | GPIO output, active low | P-MOSFET gate, switches VBAT3 |
-| LED0 (red, ERR) | P0_14 | GPIO output, active high | |
-| LED1 (yellow, WARN/INFO) | P0_22 | GPIO output, active high | |
-| LED2 (green, OK) | P0_15 | GPIO output, active high | |
-| FACTORY_RST (SW2) | P0_23 | GPIO input, pull-up, active low | Held during boot = factory reset |
-| HW_ID0 | P3_5 | GPIO input, internal pull-down | Not connected on phenix-1255-hw (reads 0); reserved for a solder jumper to +3V3 on later boards, bit 0 of the hardware ID |
-| HW_ID1 | P3_4 | GPIO input, internal pull-down | Not connected on phenix-1255-hw (reads 0); reserved for a solder jumper to +3V3 on later boards, bit 1 of the hardware ID |
-| HW_ID2 | P1_19 (J9-5) | GPIO input, internal pull-down | Not connected on phenix-1255-hw (reads 0); reserved for a solder jumper to +3V3 on later boards, bit 2 of the hardware ID |
-| FRDM red LED | P0_10 | GPIO output, active low | On the FRDM-MCXN947; blinks fast on unsupported hardware |
-| OLED SDA | P1_0 | LPI2C3 SDA (FC3_P0) | Front panel display, see [display.md](../firmware/src/display/_doc/display.md) |
-| OLED SCL | P1_1 | LPI2C3 SCL (FC3_P1) | |
+| CK_OUT | P3_18 (J1-9) | SAI1_RX_BCLK | I2S bit clock from the SX1255 |
+| DIO2 / WS | P3_19 (J1-13) | SAI1_RX_FS | I2S frame sync from the SX1255 |
+| I_OUT | P3_21 (J1-15) | SAI1_RXD0 | RX samples |
+| I_IN | P3_20 (J1-5) | SAI1_TXD0 | TX samples |
+| SCK | P0_25 (J2-12) | LPSPI1 SCK (FC1_P1) | |
+| SDI (MOSI) | P0_24 (J2-8) | LPSPI1 SDO (FC1_P0) | |
+| SDO (MISO) | P0_26 (J2-10) | LPSPI1 SDI (FC1_P2) | |
+| NSS | P0_31 (J1-16) | GPIO chip select, active low | Hardware PCS on P0_27 is not used (on-board green LED) |
+| RESET | P0_29 (J1-6) | GPIO | Idle high impedance, pulse high >= 100 us |
+| DIO0 | P0_28 (J2-2) | GPIO input | |
+| DIO1 | P0_30 (J1-10) | GPIO input | |
+| DIO3 | P0_19 (J2-13) | GPIO input | |
+| PA_EN | P1_23 (J9-23) | GPIO output, active low | P-MOSFET gate, switches VBAT3; P1_23 is also on J1-8 |
+| LED0 (green, OK) | P0_14 (J4-6) | GPIO output, active high | |
+| LED1 (yellow, INFO) | P0_22 (J4-8) | GPIO output, active high | |
+| LED2 (red, ERR) | P0_15 (J4-10) | GPIO output, active high | |
+| FACTORY_RST (SW2) | P0_23 (J4-12) | GPIO input, pull-up, active low | Held during boot = factory reset |
+| HW_ID0 | P1_19 (J9-5) | GPIO input, internal pull-down | Not connected on phenix-1255-hw (reads 0); reserved for a solder jumper to +3V3 on later boards, bit 0 of the hardware ID |
+| HW_ID1 | P3_4 (J9-12) | GPIO input, internal pull-down | Not connected on phenix-1255-hw (reads 0); reserved for a solder jumper to +3V3 on later boards, bit 1 of the hardware ID |
+| HW_ID2 | P3_5 (J9-11) | GPIO input, internal pull-down | Not connected on phenix-1255-hw (reads 0); reserved for a solder jumper to +3V3 on later boards, bit 2 of the hardware ID |
+| FRDM red LED | P0_10 (J2-4) | GPIO output, active low | On the FRDM-MCXN947; blinks fast on unsupported hardware |
+| OLED SDA | P1_0 (J2-17) | LPI2C3 SDA (FC3_P0) | Front panel display, see [display.md](../firmware/src/display/_doc/display.md) |
+| OLED SCL | P1_1 (J2-15) | LPI2C3 SCL (FC3_P1) | |
 | BTN0 (Left) | P2_0 (J3-1) | GPIO input, internal pull-down, active high | Button to +3V3 |
 | BTN1 (OK) | P1_22 (J3-3) | GPIO input, internal pull-down, active high | Button to +3V3; long press = back |
 | BTN2 (Right) | P4_12 (J4-1) | GPIO input, internal pull-down, active high | Button to +3V3 |

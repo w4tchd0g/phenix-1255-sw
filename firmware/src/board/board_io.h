@@ -11,9 +11,9 @@
 #include <stdbool.h>
 
 enum board_led {
-	BOARD_LED_ERR,  /**< LED0, red */
-	BOARD_LED_WARN, /**< LED1, yellow */
-	BOARD_LED_OK,   /**< LED2, green */
+	BOARD_LED_ERR,  /**< LED2, red */
+	BOARD_LED_INFO, /**< LED1, yellow */
+	BOARD_LED_OK,   /**< LED0, green */
 	BOARD_LED_COUNT,
 };
 

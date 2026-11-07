@@ -10,10 +10,10 @@ The firmware runs unchanged without a display.
 
 ## Hardware
 
-| Signal | MCU pin | Function | Notes |
+| Signal | MCU pin (FRDM header pin) | Function | Notes |
 |---|---|---|---|
-| OLED SDA | P1_0 | LPI2C3 SDA (FC3_P0) | mikroBUS I2C pins, 400 kHz |
-| OLED SCL | P1_1 | LPI2C3 SCL (FC3_P1) | Pull-ups on the display module |
+| OLED SDA | P1_0 (J2-17) | LPI2C3 SDA (FC3_P0) | mikroBUS I2C pins, 400 kHz |
+| OLED SCL | P1_1 (J2-15) | LPI2C3 SCL (FC3_P1) | Pull-ups on the display module |
 | BTN0 Left | P2_0 (J3-1) | GPIO input, internal pull-down, active high | `gpio-keys`, `INPUT_KEY_LEFT` |
 | BTN1 OK | P1_22 (J3-3) | GPIO input, internal pull-down, active high | `gpio-keys`, `INPUT_KEY_ENTER` |
 | BTN2 Right | P4_12 (J4-1) | GPIO input, internal pull-down, active high | `gpio-keys`, `INPUT_KEY_RIGHT` |

@@ -14,7 +14,7 @@ the relocation script would otherwise pick Zephyr's own `shell_cmds.c`
 | Command | Purpose |
 |---|---|
 | `phenix status` | Hardware variant and HW_ID jumpers, host link in use (and the stored one if it differs until the next reboot), PA state |
-| `phenix led <err\|warn\|ok> <off\|on\|slow\|fast>` | Set an LED ([board.md](../../board/_doc/board.md#status-leds)) |
+| `phenix led <err\|info\|ok> <off\|on\|slow\|fast>` | Set an LED ([board.md](../../board/_doc/board.md#status-leds)) |
 | `phenix wdt_test` | Stop feeding the watchdog, provokes a reset ([board.md](../../board/_doc/board.md#watchdog)) |
 | `phenix config show` | Stored network configuration and host link |
 | `phenix config set <key> <value>` | Validate and save a value: `link` (`usb`/`ethernet`, [config.md](../../config/_doc/config.md#host-link)), `dhcp`, `ip`, `netmask`, `gateway`, `dns`, `ctrl_port`, `sample_port` ([ethernet.md](../../ethernet/_doc/ethernet.md#configuration-on-the-console)) |

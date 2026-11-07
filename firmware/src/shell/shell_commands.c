@@ -205,7 +205,7 @@ static int cmd_config_set(const struct shell *sh, size_t argc, char **argv)
 
 static int cmd_led(const struct shell *sh, size_t argc, char **argv)
 {
-	static const char *const names[BOARD_LED_COUNT] = {"err", "warn", "ok"};
+	static const char *const names[BOARD_LED_COUNT] = {"err", "info", "ok"};
 	static const char *const modes[] = {"off", "on", "slow", "fast"};
 	int led = -1;
 	int mode = -1;
@@ -224,7 +224,7 @@ static int cmd_led(const struct shell *sh, size_t argc, char **argv)
 	}
 
 	if (led < 0 || mode < 0) {
-		shell_error(sh, "Usage: phenix led <err|warn|ok> <off|on|slow|fast>");
+		shell_error(sh, "Usage: phenix led <err|info|ok> <off|on|slow|fast>");
 		return -EINVAL;
 	}
 
@@ -450,7 +450,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(sub_phenix,
 	SHELL_CMD(config, &sub_config, "Persistent configuration", NULL),
 	SHELL_CMD(display, &sub_display, "Front panel display", cmd_display_status),
 	SHELL_CMD(gain, &sub_gain, "RX/TX gain source and manual gains", cmd_gain_status),
-	SHELL_CMD_ARG(led, NULL, "Set LED mode: <err|warn|ok> <off|on|slow|fast>", cmd_led, 3,
+	SHELL_CMD_ARG(led, NULL, "Set LED mode: <err|info|ok> <off|on|slow|fast>", cmd_led, 3,
 		      0),
 	SHELL_SUBCMD_SET_END);
 

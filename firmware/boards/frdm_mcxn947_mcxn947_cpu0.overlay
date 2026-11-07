@@ -19,7 +19,7 @@
 
 	aliases {
 		led-err = &led_err;
-		led-warn = &led_warn;
+		led-info = &led_info;
 		led-ok = &led_ok;
 		/* Red LED on the FRDM-MCXN947 (P0_10), unsupported hardware */
 		led-frdm-err = &red_led;
@@ -30,18 +30,18 @@
 		compatible = "gpio-leds";
 
 		led_err: led_err {
-			gpios = <&gpio0 14 GPIO_ACTIVE_HIGH>;
-			label = "LED0 red (ERR)";
+			gpios = <&gpio0 15 GPIO_ACTIVE_HIGH>;
+			label = "LED2 red (ERR)";
 		};
 
-		led_warn: led_warn {
+		led_info: led_info {
 			gpios = <&gpio0 22 GPIO_ACTIVE_HIGH>;
-			label = "LED1 yellow (WARN/INFO)";
+			label = "LED1 yellow (INFO)";
 		};
 
 		led_ok: led_ok {
-			gpios = <&gpio0 15 GPIO_ACTIVE_HIGH>;
-			label = "LED2 green (OK)";
+			gpios = <&gpio0 14 GPIO_ACTIVE_HIGH>;
+			label = "LED0 green (OK)";
 		};
 	};
 
@@ -54,9 +54,9 @@
 		 * HW_ID0..HW_ID2: open on phenix-1255-hw, solder jumpers to +3V3
 		 * on later boards; the internal pull-downs read open pins as 0.
 		 */
-		hw-id-gpios = <&gpio3 5 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>,
+		hw-id-gpios = <&gpio1 19 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>,
 			      <&gpio3 4 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>,
-			      <&gpio1 19 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>;
+			      <&gpio3 5 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>;
 	};
 
 	/*

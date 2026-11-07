@@ -45,7 +45,7 @@ protocol shared with the host is in
    hardware the start-up stops here; only the console runs, the front panel
    shows an error screen and the red LED of the FRDM-MCXN947 blinks
    ([board.md](../src/board/_doc/board.md#hardware-variant)).
-3. Board I/O, watchdog (LED0 blinks slowly after a watchdog reset), factory reset check (SW2), settings, SX1255 (433.92 MHz, 600 kHz,
+3. Board I/O, watchdog (LED2 blinks slowly after a watchdog reset), factory reset check (SW2), settings, SX1255 (433.92 MHz, 600 kHz,
    manual gains if selected), stream, control and RX pump.
 4. Ethernet is always configured and the web interface and the front panel
    are started, independent of the host link.
@@ -54,7 +54,7 @@ protocol shared with the host is in
    USB transport is started.
    The green LED then blinks slowly (ready, no host).
 
-An initialization error in steps 3 to 5 lights LED0 (red); the firmware
+An initialization error in steps 3 to 5 lights LED2 (red); the firmware
 keeps running so that the console and the web interface stay available.
 
 ## Threads and interrupts

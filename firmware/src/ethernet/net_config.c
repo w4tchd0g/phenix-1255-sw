@@ -71,7 +71,7 @@ static void dhcp_timeout_handler(struct k_work *work)
 	/* DHCP continues in the background and replaces the fallback */
 	fallback_active = true;
 	set_current(&fallback_addr);
-	board_led_set(BOARD_LED_WARN, BOARD_LED_ON);
+	board_led_set(BOARD_LED_INFO, BOARD_LED_ON);
 	LOG_WRN("No DHCP lease within %d s, using fallback %s/24", NET_DHCP_TIMEOUT_S,
 		current_addr);
 }
@@ -95,7 +95,7 @@ static void net_event_handler(struct net_mgmt_event_callback *cb, uint64_t event
 		}
 		set_current(&dhcp->requested_ip);
 		dhcp_bound = true;
-		board_led_set(BOARD_LED_WARN, BOARD_LED_OFF);
+		board_led_set(BOARD_LED_INFO, BOARD_LED_OFF);
 		LOG_INF("DHCP address %s, lease %u s", current_addr, dhcp->lease_time);
 	} else if (event == NET_EVENT_IF_UP) {
 		LOG_INF("Ethernet link up");
@@ -141,7 +141,7 @@ int net_config_start(const struct phenix_net_cfg *cfg)
 	dhcp_mode = cfg->dhcp;
 
 	if (cfg->dhcp) {
-		board_led_set(BOARD_LED_WARN, BOARD_LED_BLINK_SLOW);
+		board_led_set(BOARD_LED_INFO, BOARD_LED_BLINK_SLOW);
 		net_dhcpv4_start(iface);
 		k_work_reschedule(&dhcp_timeout_work, K_SECONDS(NET_DHCP_TIMEOUT_S));
 		LOG_INF("DHCP started, fallback after %d s", NET_DHCP_TIMEOUT_S);

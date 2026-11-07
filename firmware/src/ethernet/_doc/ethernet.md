@@ -42,8 +42,8 @@ with this name should be on a network segment.
 | LED1 yellow | on | Fallback address 192.168.2.10 in use |
 | LED1 yellow | off | Address configured (DHCP lease or static) |
 | LED1 yellow | short flash | Late TX packet or RX samples dropped |
-| LED2 green | slow blink | Ready, no host session |
-| LED2 green | on | Host session active |
+| LED0 green | slow blink | Ready, no host session |
+| LED0 green | on | Host session active |
 
 ## Web interface
 

@@ -28,12 +28,12 @@ PA off in this window.
 
 | LED | Off | On | Slow blink (1 Hz) | Fast blink (5 Hz) |
 |---|---|---|---|---|
-| LED0 red (ERR) | No error | Error, PA emergency shutdown | | Factory reset acknowledged |
-| LED1 yellow (WARN/INFO) | | Fallback IP address in use | Waiting for DHCP | Factory reset acknowledged |
-| LED2 green (OK) | | Host connected | Ready, no host connected | Factory reset acknowledged |
+| LED0 green (OK) | | Host connected | Ready, no host connected | Factory reset acknowledged |
+| LED1 yellow (INFO) | | Fallback IP address in use | Waiting for DHCP | Factory reset acknowledged |
+| LED2 red (ERR) | No error | Error, PA emergency shutdown | | Factory reset acknowledged |
 
 A short flash of LED1 indicates a late TX packet or an RX overflow.
-LED0 blinks slowly after a watchdog reset until the next successful stream
+LED2 blinks slowly after a watchdog reset until the next successful stream
 start. The red LED of the FRDM-MCXN947 itself (P0_10) is used only on
 unsupported hardware ([Hardware variant](#hardware-variant)).
 
@@ -48,11 +48,11 @@ the same reset at runtime ([display.md](../../display/_doc/display.md#menu)).
 
 ## Hardware variant
 
-The hardware ID is read from HW_ID0 (P3_5), HW_ID1 (P3_4) and HW_ID2 (P1_19);
-HW_ID*n* is bit *n* of the ID. The internal pull-downs of the pins are
-enabled, so an open pin reads 0 and a pin tied to +3V3 reads 1.
-phenix-1255-hw has no HW_ID jumpers; its pins stay open and read as ID 0
-(base). The same applies to µCell and compatible boards
+The hardware ID is read from HW_ID0 (P1_19, J9-5), HW_ID1 (P3_4, J9-12)
+and HW_ID2 (P3_5, J9-11); HW_ID*n* is bit *n* of the ID. The internal
+pull-downs of the pins are enabled, so an open pin reads 0 and a pin tied
+to +3V3 reads 1. phenix-1255-hw has no HW_ID jumpers; its pins stay open
+and read as ID 0 (base). The same applies to µCell and compatible boards
 ([hardware.md](../../../../_doc/hardware.md#µcell-and-compatible-boards)).
 Later boards set their ID with solder jumpers from these pins to +3V3.
 `hw_id.c` reads the pins as the first step of `main()`, before any other

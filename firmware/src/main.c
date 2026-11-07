@@ -72,11 +72,11 @@ int main(void)
 	if (factory_reset) {
 		/* All LEDs blink fast to acknowledge the reset */
 		board_led_set(BOARD_LED_ERR, BOARD_LED_BLINK_FAST);
-		board_led_set(BOARD_LED_WARN, BOARD_LED_BLINK_FAST);
+		board_led_set(BOARD_LED_INFO, BOARD_LED_BLINK_FAST);
 		board_led_set(BOARD_LED_OK, BOARD_LED_BLINK_FAST);
 		k_sleep(FACTORY_RESET_INDICATION);
 		board_led_set(BOARD_LED_ERR, BOARD_LED_OFF);
-		board_led_set(BOARD_LED_WARN, BOARD_LED_OFF);
+		board_led_set(BOARD_LED_INFO, BOARD_LED_OFF);
 	}
 
 	ret = sx1255_init();

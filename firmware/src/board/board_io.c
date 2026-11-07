@@ -68,11 +68,11 @@ static const struct gpio_dt_spec factory_rst = GPIO_DT_SPEC_GET(USER_NODE, facto
 
 static const struct gpio_dt_spec leds[BOARD_LED_COUNT] = {
 	[BOARD_LED_ERR] = GPIO_DT_SPEC_GET(DT_ALIAS(led_err), gpios),
-	[BOARD_LED_WARN] = GPIO_DT_SPEC_GET(DT_ALIAS(led_warn), gpios),
+	[BOARD_LED_INFO] = GPIO_DT_SPEC_GET(DT_ALIAS(led_info), gpios),
 	[BOARD_LED_OK] = GPIO_DT_SPEC_GET(DT_ALIAS(led_ok), gpios),
 };
 
-static const char *const led_names[BOARD_LED_COUNT] = {"ERR", "WARN", "OK"};
+static const char *const led_names[BOARD_LED_COUNT] = {"ERR", "INFO", "OK"};
 
 static atomic_t led_mode[BOARD_LED_COUNT];
 static atomic_t led_flash_ticks[BOARD_LED_COUNT];
