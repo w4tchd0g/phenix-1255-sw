@@ -183,8 +183,14 @@ must not be changed without a hardware test.
   and `LPCAC_CTRL[CLR_LPCAC]` set after every program/erase, which keeps both
   caches off until reset (Ethernet streaming then loses ~60 % of RX samples).
   `config/config_store.c` clears them after every flash operation; any new flash
-  write must do the same. Flash operations lock interrupts, so runtime saves
-  (display and gain settings) are deferred while a stream runs.
+  write must do the same. Flash operations lock interrupts (a sector erase
+  about 1 ms), so `config_store` refuses writes with `-EBUSY` while a stream
+  runs; display and gain saves are deferred, web and menu stop the stream
+  first, the console refuses.
+- **TX refill block index** is derived from the RX counter in the TX DMA
+  interrupt, not counted per interrupt: a 1 ms interrupt lock merged four
+  TX half events into one, invisible in the ring position, and shifted all
+  later TX samples by 512 samples (`stream/stream.c`).
 - **LPI2C3 (OLED):** needs `bus-idle-timeout` in the devicetree, otherwise the
   bus busy flag stays set after boot and every transfer fails (scan finds
   nothing). Module labels give 8-bit addresses (0x78/0x7A); the panel answers

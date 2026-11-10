@@ -839,15 +839,17 @@ static void open_confirm(enum confirm confirm)
 }
 
 /*
- * The flash driver programs and erases with interrupts locked, and an NVS
- * sector erase takes milliseconds: while a stream runs, saving is deferred
- * (update_timers) unless the device reboots anyway.
+ * config_store refuses flash writes while a stream runs (interrupts are
+ * locked during program and erase): saving is then retried from
+ * update_timers, or the stream is stopped first before a reboot.
  */
-static void save_display_cfg(bool force)
+static void save_display_cfg(void)
 {
-	if (ui.cfg_dirty && (force || !stream_is_running())) {
+	if (ui.cfg_dirty && !stream_is_running()) {
 		ui.cfg_dirty = false;
-		(void)config_store_set_display(&ui.cfg);
+		if (config_store_set_display(&ui.cfg) == -EBUSY) {
+			ui.cfg_dirty = true;
+		}
 	}
 }
 
@@ -856,7 +858,7 @@ static void menu_back(void)
 {
 	switch (ui.menu) {
 	case MENU_DISPLAY:
-		save_display_cfg(false);
+		save_display_cfg();
 		open_menu(MENU_MAIN, menu_index(MENU_MAIN, ITEM_DISPLAY));
 		break;
 	case MENU_NETWORK:
@@ -1142,7 +1144,8 @@ static void confirm_key(enum display_ui_key key)
 
 	switch (ui.confirm) {
 	case CONFIRM_REBOOT:
-		save_display_cfg(true);
+		control_shutdown();
+		save_display_cfg();
 		reboot_now(false);
 		break;
 	case CONFIRM_FACTORY_RESET:
@@ -1152,7 +1155,9 @@ static void confirm_key(enum display_ui_key key)
 		reboot_now(true);
 		break;
 	case CONFIRM_NET_SAVE:
-		save_display_cfg(true);
+		/* Flash writes need a stopped stream; the session ends also if saving fails */
+		control_shutdown();
+		save_display_cfg();
 		if (config_store_set_net(&ui.net) < 0) {
 			show_message("NOT SAVED", "Saving failed.", MENU_NETWORK, ui.sel);
 			break;
@@ -1161,7 +1166,8 @@ static void confirm_key(enum display_ui_key key)
 		reboot_now(false);
 		break;
 	case CONFIRM_HOST_LINK:
-		save_display_cfg(true);
+		control_shutdown();
+		save_display_cfg();
 		if (config_store_set_link(other_link()) < 0) {
 			show_message("NOT SAVED", "Saving failed.", MENU_MAIN, ui.sel);
 			break;
@@ -1389,7 +1395,7 @@ static void update_timers(int64_t now)
 
 	/* Deferred save, once the stream has stopped and the menu is closed */
 	if (ui.cfg_dirty && !(ui.screen == SCREEN_MENU && ui.menu == MENU_DISPLAY)) {
-		save_display_cfg(false);
+		save_display_cfg();
 	}
 
 	switch (ui.screen) {
@@ -1410,7 +1416,7 @@ static void update_timers(int64_t now)
 	case SCREEN_ABOUT:
 	case SCREEN_CONFIRM:
 		if (now - ui.last_input >= MENU_TIMEOUT_MS) {
-			save_display_cfg(false);
+			save_display_cfg();
 			ui.net_dirty = false;
 			ui.screen = SCREEN_PAGES;
 			ui.page_since = now;

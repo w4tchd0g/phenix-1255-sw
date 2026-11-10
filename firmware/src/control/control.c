@@ -455,6 +455,8 @@ static void stream_fault(int err)
 	k_mutex_lock(&session_lock, K_FOREVER);
 	rx_streaming = false;
 	tx_streaming = false;
+	/* Normally off already; does not rely on how the stop raced with STREAM_TX */
+	stream_tx_enable(false, false);
 	sample_io_rx_enable(false);
 	board_led_set(BOARD_LED_ERR, BOARD_LED_ON);
 	send_event(PHX_EVENT_STREAM_ERROR, err);
@@ -508,14 +510,19 @@ bool control_session_active(void)
 	return transport != NULL;
 }
 
+void control_shutdown(void)
+{
+	/* The host sees the session end before anything else happens */
+	control_session_terminate();
+	stream_stop();
+	board_pa_set(false);
+}
+
 void control_reboot(bool factory_reset)
 {
 	int ret;
 
-	/* The host sees the session end before the reset */
-	control_session_terminate();
-	stream_stop();
-	board_pa_set(false);
+	control_shutdown();
 
 	if (!factory_reset) {
 		/* Gain changes are saved with a delay; the reboot would drop them */

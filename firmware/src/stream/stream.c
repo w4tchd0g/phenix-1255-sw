@@ -12,7 +12,10 @@
  *
  * where halves is corrected by one if the hardware already crossed a half
  * boundary whose interrupt has not been serviced yet (detected by comparing
- * the parity of halves with the half the DMA is currently in).
+ * the parity of halves with the half the DMA is currently in). The RX
+ * interrupt applies the same parity check, so one half event merged into
+ * the interrupt of the next (interrupts locked for longer than one RX half)
+ * is not lost.
  *
  * TX runs synchronous to RX (SAI TCR2.SYNC = 1). TE is set before RE, so both
  * start on the same frame sync and TX ring element n is emitted in the same
@@ -27,6 +30,17 @@
  * after that boundary and ends within one buffer length of it. The check
  * and the copy run with interrupts locked, so a block is never refilled
  * while a packet is being written into it.
+ *
+ * The TX interrupt does not count its own invocations: a TX half lasts only
+ * about 0.4 ms, and interrupts locked for longer (a flash sector erase locks
+ * them for about 1 ms) merge several half events into one interrupt. An even
+ * number of lost events is invisible in the ring position and would delay
+ * all following TX samples by those blocks. Instead, k is derived from the
+ * RX counter: the TX DMA runs on the same frame sync and leads the RX DMA
+ * only by the FIFO fill, far less than half the TX ring, so the absolute TX
+ * position is the RX counter plus the ring distance from the RX to the TX
+ * DMA position. Blocks whose refill was missed are cleared in tx_buf and
+ * counted in tx_refill_late.
  */
 
 #include <errno.h>
@@ -113,6 +127,7 @@ static struct stream_iq tx_ring[2U * TX_HALF_SAMPLES_MAX] __aligned(32);
 static struct phx_cs16 tx_buf[STREAM_TX_BUFFER_SAMPLES] __aligned(32);
 
 static uint32_t tx_half_samples;
+static uint32_t tx_half_shift;
 static volatile uint64_t rx_halves;
 static volatile uint64_t tx_halves;
 static uint32_t rate;
@@ -219,34 +234,71 @@ static void tx_fill(struct stream_iq *dst, uint64_t first, uint32_t count)
 	}
 }
 
+/* Zero tx_buf for the counter range [first, first + count) */
+static void tx_buf_clear(uint64_t first, uint64_t count)
+{
+	uint32_t start = (uint32_t)(first & (STREAM_TX_BUFFER_SAMPLES - 1U));
+	uint32_t n = (uint32_t)MIN(count, (uint64_t)STREAM_TX_BUFFER_SAMPLES);
+	uint32_t part = MIN(n, STREAM_TX_BUFFER_SAMPLES - start);
+
+	memset(&tx_buf[start], 0, part * sizeof(tx_buf[0]));
+	memset(&tx_buf[0], 0, (n - part) * sizeof(tx_buf[0]));
+}
+
 static void rx_dma_isr(const void *arg)
 {
+	/*
+	 * Position before clearing the flag: an event between the two is then
+	 * either seen in the position or raises the interrupt again, never both.
+	 */
+	uint32_t pos = dma_position(RX_DMA_CH, STREAM_RX_RING_SAMPLES);
+	uint32_t half = (pos >= RX_HALF_SAMPLES) ? 1U : 0U;
+
 	ARG_UNUSED(arg);
 
 	EDMA_ClearChannelStatusFlags(edma, RX_DMA_CH, kEDMA_InterruptFlag);
 	rx_halves++;
+
+	/* A second half event merged into this interrupt */
+	if ((uint32_t)(rx_halves & 1U) != half) {
+		rx_halves++;
+	}
 }
 
 static void tx_dma_isr(const void *arg)
 {
-	uint32_t done_half;
-	uint32_t pos;
+	uint32_t ring = 2U * tx_half_samples;
+	uint64_t rx_now;
+	uint64_t tx_now;
+	uint64_t halves;
+	uint32_t lead;
 
 	ARG_UNUSED(arg);
 
 	EDMA_ClearChannelStatusFlags(edma, TX_DMA_CH, kEDMA_InterruptFlag);
-	tx_halves++;
 
-	/* The half that has just been read is refilled for its next pass */
-	done_half = (uint32_t)((tx_halves - 1U) & 1U);
+	/* RX first: the TX position read afterwards can only be further ahead */
+	rx_now = ring_counter(RX_DMA_CH, rx_halves, RX_HALF_SAMPLES);
+	lead = (dma_position(TX_DMA_CH, ring) - (uint32_t)rx_now) & (ring - 1U);
+	/* A negative distance needs a FIFO underrun; never jump ahead on one */
+	tx_now = (lead < ring / 2U) ? rx_now + lead : rx_now - MIN(rx_now, (uint64_t)(ring - lead));
+	halves = tx_now >> tx_half_shift;
 
-	/* The DMA must be in the other half, otherwise the refill is too late */
-	pos = dma_position(TX_DMA_CH, 2U * tx_half_samples);
-	if (((pos >= tx_half_samples) ? 0U : 1U) != done_half) {
-		atomic_inc(&tx_refill_late);
+	/* Raised again for an event that was already handled */
+	if (halves <= tx_halves) {
+		return;
 	}
 
-	tx_fill(&tx_ring[done_half * tx_half_samples], (tx_halves + 1U) * tx_half_samples,
+	if (halves > tx_halves + 1U) {
+		/* Blocks tx_halves + 2 .. halves never reached the ring, drop their data */
+		atomic_add(&tx_refill_late, (atomic_val_t)(halves - tx_halves - 1U));
+		tx_buf_clear((tx_halves + 2U) * tx_half_samples,
+			     (halves - tx_halves - 1U) * tx_half_samples);
+	}
+	tx_halves = halves;
+
+	/* The DMA reads half (halves & 1); the other half is refilled for its next pass */
+	tx_fill(&tx_ring[((halves + 1U) & 1U) * tx_half_samples], (halves + 1U) * tx_half_samples,
 		tx_half_samples);
 }
 
@@ -446,6 +498,7 @@ int stream_start(void)
 	}
 
 	tx_half_samples = tx_half_for_rate(sample_rate);
+	tx_half_shift = find_lsb_set(tx_half_samples) - 1U;
 	rx_halves = 0U;
 	tx_halves = 0U;
 	tx_enabled = false;
@@ -538,29 +591,55 @@ bool stream_is_running(void)
 	return running;
 }
 
+int stream_idle_lock(void)
+{
+	k_mutex_lock(&lock, K_FOREVER);
+	if (running) {
+		k_mutex_unlock(&lock);
+		return -EBUSY;
+	}
+
+	return 0;
+}
+
+void stream_idle_unlock(void)
+{
+	k_mutex_unlock(&lock);
+}
+
+/*
+ * Runs under the stream lock: the fault work stops the stream with the lock
+ * held, so it either finds TX already off or waits until enabling is
+ * complete and then switches it off. Without the lock it could stop the
+ * stream between the running check and switching the PA on, leaving PA and
+ * TX driver on without a stream.
+ */
 int stream_tx_enable(bool enable, bool tx_driver)
 {
 	bool rx, tx, drv;
 	int ret;
 
+	k_mutex_lock(&lock, K_FOREVER);
+
 	if (enable) {
 		if (!running) {
-			return -EAGAIN;
+			ret = -EAGAIN;
+			goto out;
 		}
 
 		/* PA supply first, then the drive signal */
 		ret = board_pa_set(true);
 		if (ret < 0) {
-			return ret;
+			goto out;
 		}
 		ret = sx1255_set_mode(true, true, tx_driver);
 		if (ret < 0) {
 			board_pa_set(false);
-			return ret;
+			goto out;
 		}
 		tx_enabled = true;
 		LOG_INF("TX enabled (driver %s)", tx_driver ? "on" : "off");
-		return 0;
+		goto out;
 	}
 
 	/* Stop accepting data, then remove drive signal and PA supply */
@@ -577,6 +656,8 @@ int stream_tx_enable(bool enable, bool tx_driver)
 	 */
 	memset(tx_buf, 0, sizeof(tx_buf));
 
+out:
+	k_mutex_unlock(&lock);
 	return ret;
 }
 

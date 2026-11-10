@@ -27,10 +27,11 @@ static K_MUTEX_DEFINE(lock);
 /* Bit per direction: an ignored host request was logged in this session */
 static atomic_t logged;
 
-static void save(void)
+static int save(void)
 {
 	struct phenix_gain_cfg copy;
 	bool pending;
+	int ret = 0;
 
 	k_mutex_lock(&lock, K_FOREVER);
 	pending = dirty;
@@ -38,11 +39,16 @@ static void save(void)
 	copy = cfg;
 	k_mutex_unlock(&lock);
 
-	if (pending && config_store_set_gain(&copy) < 0) {
-		k_mutex_lock(&lock, K_FOREVER);
-		dirty = true;
-		k_mutex_unlock(&lock);
+	if (pending) {
+		ret = config_store_set_gain(&copy);
+		if (ret < 0) {
+			k_mutex_lock(&lock, K_FOREVER);
+			dirty = true;
+			k_mutex_unlock(&lock);
+		}
 	}
+
+	return ret;
 }
 
 static void save_work_handler(struct k_work *work);
@@ -53,11 +59,10 @@ static void save_work_handler(struct k_work *work)
 {
 	ARG_UNUSED(work);
 
-	if (stream_is_running()) {
+	/* config_store refuses while a stream runs; also covers a start meanwhile */
+	if (stream_is_running() || save() == -EBUSY) {
 		k_work_reschedule(&save_work, SAVE_RETRY);
-		return;
 	}
-	save();
 }
 
 /* Caller holds the lock */
@@ -200,5 +205,5 @@ void gain_ctrl_session_start(void)
 void gain_ctrl_flush(void)
 {
 	(void)k_work_cancel_delayable(&save_work);
-	save();
+	(void)save();
 }

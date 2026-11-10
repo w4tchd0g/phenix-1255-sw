@@ -61,7 +61,7 @@ keeps running so that the console and the web interface stay available.
 
 | Context | Priority | Work |
 |---|---|---|
-| eDMA RX/TX interrupts | DT priority | Count ring halves, refill the TX ring from the TX buffer |
+| eDMA RX/TX interrupts | DT priority | Count ring halves, refill the TX ring from the TX buffer (block index from the RX counter) |
 | SAI interrupt | 2 | FIFO errors (stream fault, PA off), frame sync error counters |
 | LPI2C3, GPIO port 0/1/2/4 interrupts | 3 | Display bus and button edges |
 | USB device stack thread | cooperative 8 | USB events, TX packet ingest on USB |
@@ -88,8 +88,10 @@ over Ethernet.
 PA_EN is driven off as early as possible during boot and is switched on only
 by `STREAM_TX`. It is switched off immediately on `STREAM_TX` off, stream
 stop, SAI FIFO errors, session end (TCP close, USB reset, deconfiguration,
-suspend or VBUS loss, link timeout of 1 s) and before a reboot from the web
-interface or the front panel menu (`control_reboot()`). The watchdog resets
+suspend or VBUS loss, link timeout of 1 s) and before the web interface or
+the front panel menu save settings or reboot (`control_shutdown()`,
+`control_reboot()`). Switching TX on and stopping the stream share a lock,
+so a stream fault during `STREAM_TX` cannot leave the PA on. The watchdog resets
 the MCU if the system hangs; the reset ends any transmission and the early
 boot code drives PA_EN off again. While the MCU is in reset, PA_EN is high
 impedance and the pull-up on the PA gate of phenix-1255-hw keeps the PA off

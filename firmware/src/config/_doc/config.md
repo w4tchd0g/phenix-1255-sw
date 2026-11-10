@@ -62,7 +62,16 @@ on Ethernet the RX pump keeps up with only about 220 kS/s of 600 kS/s.
 `config_store.c` releases both bits after every flash operation; any new
 flash write must do the same.
 
-The driver also locks interrupts while it programs or erases, so settings are
-written at runtime only when no stream runs or the device reboots
-afterwards. Display and gain settings changed during a stream are saved
-when it stops.
+## Flash writes and streaming
+
+The driver also locks interrupts while it programs or erases; an NVS sector
+erase locks them for about 1 ms, longer than a TX refill block of a running
+stream ([stream.md](../../stream/_doc/stream.md#rxtx-alignment)). Every
+setter and the erase therefore return `-EBUSY` while a stream runs and keep
+the stream from starting until the write is done; no caller can write the
+flash during a stream:
+
+- Display and gain settings changed during a stream are saved when it stops.
+- The web interface and the front panel menu end the host session and stop
+  the stream before they save settings that need a reboot.
+- `phenix config set` is refused while a stream runs.

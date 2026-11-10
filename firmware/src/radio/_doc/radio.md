@@ -107,7 +107,8 @@ for both directions.
   ([config.md](../../config/_doc/config.md)) and applied at boot and after
   `sx1255 reset`. They are saved 2 s after the last change, so that a held
   button causes one flash write; while a stream runs, saving is deferred
-  until it stops, because flash writes lock interrupts. A reboot from the
+  until it stops, because flash writes lock interrupts
+  ([config.md](../../config/_doc/config.md#flash-writes-and-streaming)). A reboot from the
   menu, the web interface or `control_reboot()` saves pending changes first.
 - `sx1255 gain` on the console writes the register directly, bypassing the
   gain source; manual values are not changed by it.

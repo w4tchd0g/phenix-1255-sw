@@ -97,6 +97,16 @@ static int cmd_config_show(const struct shell *sh, size_t argc, char **argv)
 	return 0;
 }
 
+static void print_save_error(const struct shell *sh, int err)
+{
+	if (err == -EBUSY) {
+		/* Flash writes lock interrupts, which disturbs the stream */
+		shell_error(sh, "Not saved: stream running, stop it or end the host session first");
+	} else {
+		shell_error(sh, "Saving failed (%d)", err);
+	}
+}
+
 static int set_link(const struct shell *sh, const char *val)
 {
 	enum phenix_host_link link;
@@ -113,7 +123,7 @@ static int set_link(const struct shell *sh, const char *val)
 
 	ret = config_store_set_link(link);
 	if (ret < 0) {
-		shell_error(sh, "Saving failed (%d)", ret);
+		print_save_error(sh, ret);
 		return ret;
 	}
 
@@ -194,7 +204,7 @@ static int cmd_config_set(const struct shell *sh, size_t argc, char **argv)
 
 	ret = config_store_set_net(&cfg);
 	if (ret < 0) {
-		shell_error(sh, "Saving failed (%d)", ret);
+		print_save_error(sh, ret);
 		return ret;
 	}
 

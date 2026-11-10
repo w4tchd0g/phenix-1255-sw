@@ -144,7 +144,8 @@ MENU
 - Display settings take effect at once and are saved when leaving the
   Display menu (or when the menu times out). While a stream runs, saving is
   deferred until it stops, because flash writes lock interrupts and would
-  interrupt the sample path.
+  interrupt the sample path. *Reboot*, *Save+reboot* and *Host link* end the
+  host session and stop the stream first, then save.
 - Network changes are kept in the menu until *Save+reboot*; leaving the
   menu discards them. The same validation as on the web interface and the
   console applies; a rejected configuration shows the reason.

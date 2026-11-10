@@ -242,7 +242,9 @@ On Ethernet the device uses DHCP. Without a lease after 30 s it adds the
 fallback address **192.168.2.10/24** (yellow LED on). The web interface at
 `http://phenix-1255.local/` (or the device IP address) shows the status and
 changes the host link and network settings; it has no authentication, so use the device on
-a trusted network only. Holding SW2 during boot restores the factory
+a trusted network only. Settings are saved only when the page was opened via
+the device IP address or `phenix-1255.local`, which keeps pages of other
+sites from changing them. Holding SW2 during boot restores the factory
 defaults.
 
 | Device argument | Default | Description |

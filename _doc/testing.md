@@ -96,6 +96,9 @@ Expected results:
 | Factory reset | Hold SW2 during reset | All LEDs blink fast, network defaults restored |
 | Factory reset (menu) | Menu, *Factory reset*, confirm twice | Session closed, PA off, defaults restored after the reboot |
 | Flash write at runtime | `phenix config set sample_port 1257`, then `... 1256`, then `phx_soapy_test rx` over Ethernet | `PASS` at the full rate (flash caches released after the write) |
+| Flash write while streaming | `stream start`, `phenix config set link usb`, `stream stop` | Refused with `Not saved: stream running`; saved after `stream stop` |
+| Web save while streaming | `stream start`, save the unchanged form in the web interface | `Saved`, the device reboots (stream stopped before the write) |
+| Web requests from other sites | `POST /config` with `Origin: http://example.com`, with `Host: example.com`, and with a 1900-byte header plus `Content-Length: 1024` | `403`, `403`, `400`; the device keeps running |
 
 ## Front panel
 

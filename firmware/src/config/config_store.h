@@ -90,6 +90,12 @@ int config_store_init(bool factory_reset);
 
 void config_store_defaults(struct phenix_net_cfg *cfg);
 
+/*
+ * The setters and config_store_erase() write the flash, which locks
+ * interrupts. They return -EBUSY while a stream runs and keep the stream
+ * from starting until the write is done.
+ */
+
 void config_store_get_net(struct phenix_net_cfg *cfg);
 
 /** Validate and persist a new network configuration. Applied at next boot. */
@@ -102,10 +108,7 @@ int config_store_set_display(const struct phenix_display_cfg *cfg);
 
 void config_store_get_gain(struct phenix_gain_cfg *cfg);
 
-/**
- * Persist the gain settings. Locks interrupts while the flash is written;
- * not to be called while a stream runs unless the device reboots anyway.
- */
+/** Persist the gain settings. */
 int config_store_set_gain(const struct phenix_gain_cfg *cfg);
 
 /** Host link loaded at boot; the transports are started for this link. */

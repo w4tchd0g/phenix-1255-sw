@@ -377,6 +377,12 @@ static void handle_post_config(int sock, char *body)
 		return;
 	}
 
+	/*
+	 * Flash writes are refused while a stream runs; the reboot ends the
+	 * session anyway. Ends it also when saving fails below.
+	 */
+	control_shutdown();
+
 	ret = config_store_set_net(&cfg);
 	/* Avoids a flash write when only the network settings changed */
 	if (ret == 0 && link != config_store_get_link()) {
@@ -411,12 +417,52 @@ static void handle_post_config(int sock, char *body)
 	k_work_reschedule(&reboot_work, REBOOT_DELAY);
 }
 
+/*
+ * Copy the value of a request header (name case-insensitive, surrounding
+ * blanks removed) into out. A value longer than out is truncated, which
+ * cannot match any of the short values compared against. Returns false if
+ * the header is absent. Needs a complete request head in req.
+ */
+static bool get_header(const char *name, char *out, size_t len)
+{
+	const char *end = strstr(req, "\r\n\r\n");
+	size_t name_len = strlen(name);
+
+	/* Header lines follow the request line */
+	for (const char *line = strstr(req, "\r\n"); line != NULL && line < end;
+	     line = strstr(line, "\r\n")) {
+		const char *val;
+		size_t n;
+
+		line += 2;
+		if (strncasecmp(line, name, name_len) != 0 || line[name_len] != ':') {
+			continue;
+		}
+
+		val = &line[name_len + 1];
+		while (*val == ' ' || *val == '\t') {
+			val++;
+		}
+		/* The head ends with an empty line, so every header line has a CRLF */
+		n = (size_t)(strstr(val, "\r\n") - val);
+		while (n > 0U && (val[n - 1U] == ' ' || val[n - 1U] == '\t')) {
+			n--;
+		}
+		n = MIN(n, len - 1U);
+		memcpy(out, val, n);
+		out[n] = '\0';
+		return true;
+	}
+
+	return false;
+}
+
 /* Read the request head and, if present, the body. Returns body or NULL. */
 static int read_request(int sock, char **body_out, size_t *body_len)
 {
 	size_t len = 0;
 	char *end = NULL;
-	const char *line;
+	char val[16];
 	size_t content_length = 0;
 	size_t head_len;
 
@@ -437,17 +483,12 @@ static int read_request(int sock, char **body_out, size_t *body_len)
 
 	head_len = (size_t)(end - req) + 4U;
 
-	/* Content-Length header (name is case-insensitive), after the request line */
-	for (line = strstr(req, "\r\n"); line != NULL && line < end;
-	     line = strstr(line, "\r\n")) {
-		line += 2;
-		if (strncasecmp(line, "Content-Length:", 15) == 0) {
-			content_length = strtoul(line + 15, NULL, 10);
-			break;
-		}
+	if (get_header("Content-Length", val, sizeof(val))) {
+		content_length = strtoul(val, NULL, 10);
 	}
 
-	if (content_length > BODY_MAX) {
+	/* Head and body share req: a long head leaves less room for the body */
+	if (content_length > BODY_MAX || head_len + content_length > REQ_MAX) {
 		return -E2BIG;
 	}
 
@@ -465,6 +506,69 @@ static int read_request(int sock, char **body_out, size_t *body_len)
 	*body_len = content_length;
 
 	return 0;
+}
+
+/*
+ * Host names of this device: its current IPv4 address and the mDNS name,
+ * each optionally with the HTTP port. len is the length of host to compare.
+ */
+static bool own_host(const char *host, size_t len)
+{
+	static const char mdns[] = PHX_MDNS_HOSTNAME ".local";
+	char port[8];
+	char addr[NET_IPV4_ADDR_LEN];
+	size_t port_len = (size_t)snprintf(port, sizeof(port), ":%u", PHENIX_HTTP_PORT);
+
+	if (len > port_len && strncmp(&host[len - port_len], port, port_len) == 0) {
+		len -= port_len;
+	}
+
+	net_config_get_address(addr, sizeof(addr));
+	if (addr[0] != '\0' && len == strlen(addr) && strncmp(host, addr, len) == 0) {
+		return true;
+	}
+
+	return len == strlen(mdns) && strncasecmp(host, mdns, len) == 0;
+}
+
+/* Origin ("http://host") or Referer ("http://host/path") pointing to this device */
+static bool own_origin(const char *origin)
+{
+	static const char scheme[] = "http://";
+	const char *host = origin;
+
+	if (strncasecmp(origin, scheme, sizeof(scheme) - 1U) != 0) {
+		return false;
+	}
+	host += sizeof(scheme) - 1U;
+
+	return own_host(host, strcspn(host, "/?#"));
+}
+
+/*
+ * Protection of POST against cross-site requests: a page from another site
+ * opened in a browser on the same network can submit a form to the device.
+ * Browsers send Origin (or at least Referer) with such a POST, which must
+ * name this device. Host must name it as well, so that a foreign host name
+ * resolved to the device address (DNS rebinding) does not count as same
+ * origin. Clients without Origin and Referer (curl) are not browsers and
+ * are accepted. Returns NULL or the reason for the rejection.
+ */
+static const char *check_post_origin(void)
+{
+	char val[96];
+
+	if (!get_header("Host", val, sizeof(val)) || !own_host(val, strlen(val))) {
+		return "unknown host name";
+	}
+	if (get_header("Origin", val, sizeof(val))) {
+		return own_origin(val) ? NULL : "request from another site";
+	}
+	if (get_header("Referer", val, sizeof(val))) {
+		return own_origin(val) ? NULL : "request from another site";
+	}
+
+	return NULL;
 }
 
 static void handle_client(int sock)
@@ -488,7 +592,22 @@ static void handle_client(int sock)
 		render_json();
 		send_response(sock, "200 OK", "application/json");
 	} else if (strncmp(req, "POST /config ", 13) == 0) {
-		handle_post_config(sock, body);
+		const char *reject = check_post_origin();
+
+		if (reject != NULL) {
+			char msg[160];
+
+			LOG_WRN("Configuration change rejected: %s", reject);
+			snprintf(msg, sizeof(msg),
+				 "Not saved: %s. Open the web interface via its IP address or "
+				 "%s.local.",
+				 reject, PHX_MDNS_HOSTNAME);
+			config_store_get_net(&cfg);
+			render_page(&cfg, config_store_get_link(), msg, true);
+			send_response(sock, "403 Forbidden", "text/html; charset=utf-8");
+		} else {
+			handle_post_config(sock, body);
+		}
 	} else {
 		page_len = 0;
 		out("Not found\n");

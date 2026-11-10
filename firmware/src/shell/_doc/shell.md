@@ -17,7 +17,7 @@ the relocation script would otherwise pick Zephyr's own `shell_cmds.c`
 | `phenix led <err\|info\|ok> <off\|on\|slow\|fast>` | Set an LED ([board.md](../../board/_doc/board.md#status-leds)) |
 | `phenix wdt_test` | Stop feeding the watchdog, provokes a reset ([board.md](../../board/_doc/board.md#watchdog)) |
 | `phenix config show` | Stored network configuration and host link |
-| `phenix config set <key> <value>` | Validate and save a value: `link` (`usb`/`ethernet`, [config.md](../../config/_doc/config.md#host-link)), `dhcp`, `ip`, `netmask`, `gateway`, `dns`, `ctrl_port`, `sample_port` ([ethernet.md](../../ethernet/_doc/ethernet.md#configuration-on-the-console)) |
+| `phenix config set <key> <value>` | Validate and save a value: `link` (`usb`/`ethernet`, [config.md](../../config/_doc/config.md#host-link)), `dhcp`, `ip`, `netmask`, `gateway`, `dns`, `ctrl_port`, `sample_port` ([ethernet.md](../../ethernet/_doc/ethernet.md#configuration-on-the-console)); refused while a stream runs ([config.md](../../config/_doc/config.md#flash-writes-and-streaming)) |
 | `phenix gain` | Gain source and gains of RX and TX |
 | `phenix gain mode <rx\|tx> <host\|manual>` | Select the gain source of a direction ([radio.md](../../radio/_doc/radio.md#gain-source)) |
 | `phenix gain set <lna\|pga\|dac\|mixer> <dB>` | Set a manual gain; refused while the direction is in host mode |
@@ -54,7 +54,7 @@ commands are refused.
 | Command | Purpose |
 |---|---|
 | `stream start` / `stream stop` | Start/stop the I2S interface and the sample counter (the PA is not switched) |
-| `stream status` | Counter, FIFO and frame sync errors, late TX refills, packet counters |
+| `stream status` | Counter, FIFO and frame sync errors, missed TX refill blocks (`tx_refill_late`), packet counters |
 | `stream regs` | SAI registers |
 | `stream rate [ms]` | Counter rate against the CPU clock |
 | `stream check [ms]` | Counter monotonicity under continuous reads |

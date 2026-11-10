@@ -38,7 +38,7 @@ struct stream_stats {
 	uint32_t tx_fifo_errors;   /**< SAI TX FIFO underruns */
 	uint32_t rx_sync_errors;   /**< SAI RX frame sync errors */
 	uint32_t tx_sync_errors;   /**< SAI TX frame sync errors */
-	uint32_t tx_refill_late;   /**< TX refills that missed their deadline */
+	uint32_t tx_refill_late;   /**< TX blocks whose refill was missed */
 	uint32_t tx_late;          /**< TX packets discarded as too late */
 	uint32_t tx_early;         /**< TX packets discarded as too early */
 	uint64_t tx_blocks;        /**< TX refill blocks since start */
@@ -67,6 +67,19 @@ int stream_stop(void);
 
 bool stream_is_running(void);
 
+/**
+ * Keep the stream stopped, e.g. for a flash write: flash program and erase
+ * lock interrupts for up to about 1 ms, which stalls the TX refill and the
+ * sample counters of a running stream. On success, stream_start() blocks
+ * until stream_idle_unlock().
+ *
+ * @retval 0      Stream stopped and held stopped
+ * @retval -EBUSY Stream running, nothing held
+ */
+int stream_idle_lock(void);
+
+void stream_idle_unlock(void);
+
 /** Current sample counter: number of RX samples completely written. */
 uint64_t stream_counter(void);
 
@@ -84,7 +97,7 @@ int stream_rx_read(uint64_t index, struct phx_cs16 *dst, size_t count);
 /**
  * Enable or disable TX. Enabling switches on PA_EN and, if tx_driver is
  * set, the SX1255 TX driver. Disabling switches both off and clears the
- * TX buffer.
+ * TX buffer. Serialized with stream_start() and stream_stop().
  */
 int stream_tx_enable(bool enable, bool tx_driver);
 

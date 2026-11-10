@@ -51,6 +51,16 @@ with this name should be on a network segment.
 and a form for the host link and the network settings. There is no authentication; the device
 is intended for a trusted local network.
 
+Settings are only accepted from the device's own page, so that a page of
+another site opened in a browser on the same network cannot change them:
+`POST /config` needs a `Host` header with the device IP address or
+`phenix-1255.local` (optionally with `:80`), and an `Origin` or `Referer`
+header, if present, must name one of these as well. Other host names, also
+one that resolves to the device (DNS rebinding), get `403 Forbidden`; the
+page can still be viewed under them. Clients without `Origin` and `Referer`
+(e.g. `curl`) are accepted. Requests whose head and body exceed 2048 bytes
+get `400 Bad Request`.
+
 | Path | Method | Content |
 |---|---|---|
 | `/` | GET | Status and configuration form |
@@ -59,8 +69,10 @@ is intended for a trusted local network.
 
 Saving validates all fields (host link, address, netmask, gateway in the
 local subnet, ports 1..65535, control port not 80). Invalid input is rejected and nothing is
-stored. After a successful save the device switches TX off (PA off), closes
-the host session and reboots with the new settings.
+stored. Valid input switches TX off (PA off), closes the host session and
+stops the stream before it is written, because flash writes are refused
+while a stream runs ([config.md](../../config/_doc/config.md#flash-writes-and-streaming));
+the device then reboots with the new settings.
 
 Form fields of `/config`: `link` (`usb`/`ethernet`), `dhcp` (`on`/`off`),
 `ip`, `netmask`, `gateway`, `dns` (empty = none), `ctrl_port`,
@@ -82,7 +94,8 @@ IPv4-only device does not answer. Using the IP address avoids the delay.
 ## Configuration on the console
 
 The network configuration and the host link can also be changed on the
-MCU-Link console; they take effect after a reboot:
+MCU-Link console; they take effect after a reboot. Saving is refused while
+a stream runs ([config.md](../../config/_doc/config.md#flash-writes-and-streaming)):
 
 ```
 phenix config show

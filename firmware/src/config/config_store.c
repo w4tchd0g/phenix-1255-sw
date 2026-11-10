@@ -17,6 +17,7 @@
 #include <fsl_device_registers.h>
 
 #include "config/config_store.h"
+#include "stream/stream.h"
 
 LOG_MODULE_REGISTER(config_store, LOG_LEVEL_INF);
 
@@ -83,6 +84,33 @@ static void flash_caches_release(void)
 	SYSCON->LPCAC_CTRL &= ~SYSCON_LPCAC_CTRL_CLR_LPCAC_MASK;
 	__DSB();
 	__ISB();
+}
+
+/*
+ * Flash program and erase lock interrupts (an NVS sector erase for about
+ * 1 ms), longer than a TX refill block of a running stream, so the stream
+ * would replay stale TX samples and lose refill interrupts. Every runtime
+ * flash write therefore needs a stopped stream and holds it stopped until
+ * the write is done; callers save later or stop the stream first.
+ */
+static int save_record(const char *name, const char *what, const void *rec, size_t len)
+{
+	int ret = stream_idle_lock();
+
+	if (ret < 0) {
+		LOG_WRN("%s not saved: stream running", what);
+		return ret;
+	}
+
+	ret = settings_save_one(name, rec, len);
+	flash_caches_release();
+	stream_idle_unlock();
+
+	if (ret < 0) {
+		LOG_ERR("Saving %s failed (%d)", what, ret);
+	}
+
+	return ret;
 }
 
 static struct phenix_net_cfg net_cfg;
@@ -286,14 +314,19 @@ int config_store_erase(void)
 	const struct flash_area *fa;
 	int ret;
 
-	ret = flash_area_open(SETTINGS_PARTITION_ID, &fa);
+	ret = stream_idle_lock();
 	if (ret < 0) {
 		return ret;
 	}
 
-	ret = flash_area_erase(fa, 0, fa->fa_size);
-	flash_area_close(fa);
-	flash_caches_release();
+	ret = flash_area_open(SETTINGS_PARTITION_ID, &fa);
+	if (ret == 0) {
+		ret = flash_area_erase(fa, 0, fa->fa_size);
+		flash_area_close(fa);
+		flash_caches_release();
+	}
+
+	stream_idle_unlock();
 
 	return ret;
 }
@@ -317,7 +350,7 @@ int config_store_init(bool factory_reset)
 		LOG_WRN("Factory reset: all settings erased");
 	}
 
-	/* Mounting and loading may write to the flash (NVS recovery, GC) */
+	/* Mounting and loading may write to the flash (NVS recovery, GC); no stream runs yet */
 	ret = settings_subsys_init();
 	flash_caches_release();
 	if (ret < 0) {
@@ -359,16 +392,11 @@ int config_store_set_net(const struct phenix_net_cfg *cfg)
 	record_from_cfg(&rec, cfg);
 
 	k_mutex_lock(&cfg_lock, K_FOREVER);
-	ret = settings_save_one("phenix/net", &rec, sizeof(rec));
-	flash_caches_release();
+	ret = save_record("phenix/net", "network configuration", &rec, sizeof(rec));
 	if (ret == 0) {
 		net_cfg = *cfg;
 	}
 	k_mutex_unlock(&cfg_lock);
-
-	if (ret < 0) {
-		LOG_ERR("Saving network configuration failed (%d)", ret);
-	}
 
 	return ret;
 }
@@ -395,16 +423,11 @@ int config_store_set_display(const struct phenix_display_cfg *cfg)
 	rec.auto_pages = cfg->auto_pages ? 1U : 0U;
 
 	k_mutex_lock(&cfg_lock, K_FOREVER);
-	ret = settings_save_one("phenix/display", &rec, sizeof(rec));
-	flash_caches_release();
+	ret = save_record("phenix/display", "display settings", &rec, sizeof(rec));
 	if (ret == 0) {
 		display_cfg = *cfg;
 	}
 	k_mutex_unlock(&cfg_lock);
-
-	if (ret < 0) {
-		LOG_ERR("Saving display settings failed (%d)", ret);
-	}
 
 	return ret;
 }
@@ -428,16 +451,11 @@ int config_store_set_gain(const struct phenix_gain_cfg *cfg)
 	memcpy(rec.db, cfg->db, sizeof(rec.db));
 
 	k_mutex_lock(&cfg_lock, K_FOREVER);
-	ret = settings_save_one("phenix/gain", &rec, sizeof(rec));
-	flash_caches_release();
+	ret = save_record("phenix/gain", "gain settings", &rec, sizeof(rec));
 	if (ret == 0) {
 		gain_cfg = *cfg;
 	}
 	k_mutex_unlock(&cfg_lock);
-
-	if (ret < 0) {
-		LOG_ERR("Saving gain settings failed (%d)", ret);
-	}
 
 	return ret;
 }
@@ -468,16 +486,13 @@ int config_store_set_link(enum phenix_host_link link)
 	}
 
 	k_mutex_lock(&cfg_lock, K_FOREVER);
-	ret = settings_save_one("phenix/link", &rec, sizeof(rec));
-	flash_caches_release();
+	ret = save_record("phenix/link", "host link", &rec, sizeof(rec));
 	if (ret == 0) {
 		host_link = link;
 	}
 	k_mutex_unlock(&cfg_lock);
 
-	if (ret < 0) {
-		LOG_ERR("Saving host link failed (%d)", ret);
-	} else {
+	if (ret == 0) {
 		LOG_INF("Host link %s stored, applied after reboot", config_store_link_str(link));
 	}
 
