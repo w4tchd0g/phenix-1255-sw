@@ -173,7 +173,7 @@ push to `develop` and on pull requests from `develop` to `main`:
 | Job | Runner | Checks |
 |---|---|---|
 | Firmware | Ubuntu | Pristine build for `frdm_mcxn947/mcxn947/cpu0` with `CONFIG_COMPILER_WARNINGS_AS_ERRORS=y`; memory report in the job summary |
-| SoapySDR module | Ubuntu | Build with `CMAKE_COMPILE_WARNING_AS_ERROR=ON` and USB support, `SoapySDRUtil --info` must list the `phenix-1255` factory; syntax check of `tools/phx_client.py` |
+| SoapySDR module | Ubuntu | Build with `CMAKE_COMPILE_WARNING_AS_ERROR=ON` and USB support, `SoapySDRUtil --info` must list the `phenix-1255` factory; syntax check of the Python tools in `tools/` |
 
 Compiler warnings fail the build. The firmware (`zephyr.bin`, `zephyr.elf`,
 `zephyr.map`) is kept as a workflow artifact for 30 days and is not

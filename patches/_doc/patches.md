@@ -74,7 +74,9 @@ device = "driver=phenix-1255,addr=192.168.2.10"
 ```
 
 Gains are overridden as for other devices, e.g. `rx_gain_lna = 30.0` or
-`tx_gain_mixer = 24.0`. The available sample rates are 600, 300, 150, 75, 50
+`tx_gain_mixer = 24.0`. If a direction is set to Manual on the device, the
+station's gains for it are ignored
+([radio.md](../../firmware/src/radio/_doc/radio.md#gain-source)). The available sample rates are 600, 300, 150, 75, 50
 and 25 kHz; the default of 600 kHz is recommended.
 
 RX and TX frequencies are set independently (separate SX1255 synthesizers),

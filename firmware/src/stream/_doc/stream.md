@@ -62,6 +62,19 @@ interrupts. The block size is chosen per sample rate (about 0.4 ms, 16 to 256
 samples). The data for a sample must be available one to two blocks before
 its frame.
 
+The TX interrupt does not count its invocations to know which block is due.
+Interrupts locked for longer than one block merge several half events into
+one interrupt; a flash sector erase locks them for about 1 ms, four blocks
+at 600 kS/s. An even number of lost events cannot be seen in the ring
+position and would delay every following TX sample by these blocks. The
+interrupt derives the block index from the RX counter and the distance
+between the RX and TX DMA positions instead (the TX DMA leads only by the
+FIFO fill). Blocks whose refill was missed are cleared in the TX buffer and
+counted as `tx_refill_late` in `stream status`; the TX timing stays
+correct. The RX interrupt catches one merged half event by the same parity
+check that the counter uses. Flash writes are refused while a stream runs
+([config.md](../../config/_doc/config.md#flash-writes-and-streaming)).
+
 ## Sample paths
 
 **RX:** the eDMA writes the SAI receive FIFO into a ring of 4096 samples

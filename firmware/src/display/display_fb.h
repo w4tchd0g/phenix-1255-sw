@@ -4,7 +4,8 @@
  *
  * Monochrome 128x64 frame buffer in the SSD1306 memory layout (8 pages of
  * 128 column bytes, bit 0 = top pixel) with a 5x7 text font. Text is drawn
- * in page-aligned rows, so a glyph column is one frame buffer byte.
+ * in page-aligned rows, so a glyph column is one frame buffer byte; bitmaps
+ * are placed at any pixel position.
  */
 
 #ifndef PHENIX_DISPLAY_FB_H_
@@ -22,7 +23,23 @@
 #define FB_CHAR_WIDTH 6
 #define FB_COLS       (FB_WIDTH / FB_CHAR_WIDTH)
 
+/**
+ * 1-bit image: rows from top to bottom, each row padded to whole bytes,
+ * most significant bit = leftmost pixel.
+ */
+struct fb_bitmap {
+	uint8_t width;
+	uint8_t height;
+	const uint8_t *bits;
+};
+
 void fb_clear(uint8_t *fb);
+
+/**
+ * Draw the lit pixels of a bitmap with its top left corner at pixel (x, y),
+ * clipped at the screen edges. Unlit pixels leave the frame buffer as is.
+ */
+void fb_bitmap(uint8_t *fb, int x, int y, const struct fb_bitmap *bm);
 
 /** Set or clear the columns [x0, x1) of a text row. */
 void fb_fill(uint8_t *fb, int row, int x0, int x1, bool on);

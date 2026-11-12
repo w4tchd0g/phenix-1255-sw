@@ -8,7 +8,7 @@ they belong to.
 
 - **phenix-1255-hw bring-up** – run the checks in
   [testing.md](testing.md#phenix-1255-hw-bring-up) on the first boards: PA
-  enable, status LEDs, DIO0/1/3, encoder, signal integrity, loop delay and
+  enable, status LEDs, DIO0/1/3, buttons, signal integrity, loop delay and
   current draw.
 - **USB power** – set `bMaxPower` from the measured current draw
   ([usb.md](../firmware/src/usb/_doc/usb.md#usb-identification)).
@@ -30,8 +30,8 @@ they belong to.
 
 ## Improvements
 
-- **Front panel on the second core** – move the display and the rotary
-  encoder to the second Cortex-M33 core (cpu1), which is unused so far. The
+- **Front panel on the second core** – move the display and the button
+  handling to the second Cortex-M33 core (cpu1), which is unused so far. The
   front panel then no longer shares CPU time and memory with the sample path
   and the network stack on cpu0; status and settings are exchanged between
   the cores.

@@ -5,7 +5,6 @@
 
 #include <stdarg.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 #include <zephyr/kernel.h>
@@ -20,12 +19,15 @@
 #include <zephyr/app_version.h>
 
 #include "board/board_io.h"
+#include "board/hw_id.h"
 #include "board/watchdog.h"
 #include "config/config_store.h"
 #include "control/control.h"
 #include "display/display_fb.h"
 #include "display/display_ui.h"
+#include "display/splash_logo.h"
 #include "ethernet/net_config.h"
+#include "radio/gain_ctrl.h"
 #include "radio/sx1255.h"
 #include "radio/sx1255_regs.h"
 #include "stream/sample_io.h"
@@ -38,16 +40,19 @@ LOG_MODULE_REGISTER(display_ui, LOG_LEVEL_INF);
 #define UI_PRIORITY   K_PRIO_PREEMPT(9)
 
 #define REFRESH_MS      250
-#define SPLASH_MS       1500
+#define SPLASH_MS       3000
 #define PAGE_PERIOD_MS  5000
 /* Automatic page cycling resumes this long after a manual page change */
 #define MANUAL_HOLD_MS  60000
 /* Menus close after this time without input */
 #define MENU_TIMEOUT_MS 60000
 #define MESSAGE_MS      2500
+/* OK held this long means back; it fires while the button is still held */
 #define LONG_PRESS_MS   800
-/* Encoder detents closer than this step IP octets by 10 */
-#define FAST_TURN_MS    60
+/* Left/Right held: first repeat, repeat period, and steps of 10 for IP octets */
+#define REPEAT_DELAY_MS 500
+#define REPEAT_MS       100
+#define FAST_AFTER_MS   2000
 
 /* SSD1306 contrast per brightness level, and while dimmed */
 #define CONTRAST_STEP 25
@@ -65,6 +70,11 @@ LOG_MODULE_REGISTER(display_ui, LOG_LEVEL_INF);
 /* Inset of menu labels and values from the screen edges */
 #define MENU_INSET 2
 
+/* Start screen: phoenix at the left of the blue zone, text to its right */
+#define SPLASH_LOGO_X   4
+#define SPLASH_TEXT_GAP 5
+#define SPLASH_TEXT_X   (SPLASH_LOGO_X + splash_phoenix.width + SPLASH_TEXT_GAP)
+
 static const struct device *const disp = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
 
 enum ui_event_type {
@@ -75,6 +85,8 @@ enum ui_event_type {
 struct ui_event {
 	uint8_t type;
 	uint8_t arg;
+	/* Repeated step of a button held for FAST_AFTER_MS */
+	bool fast;
 };
 
 K_MSGQ_DEFINE(ui_events, sizeof(struct ui_event), 16, 1);
@@ -83,6 +95,7 @@ enum screen {
 	SCREEN_SPLASH,
 	SCREEN_PAGES,
 	SCREEN_MENU,
+	SCREEN_ABOUT,
 	SCREEN_CONFIRM,
 	SCREEN_MESSAGE,
 	SCREEN_TEST,
@@ -90,7 +103,8 @@ enum screen {
 
 static const char *const screen_names[] = {
 	[SCREEN_SPLASH] = "splash", [SCREEN_PAGES] = "pages",     [SCREEN_MENU] = "menu",
-	[SCREEN_CONFIRM] = "confirm", [SCREEN_MESSAGE] = "message", [SCREEN_TEST] = "test",
+	[SCREEN_ABOUT] = "about",   [SCREEN_CONFIRM] = "confirm", [SCREEN_MESSAGE] = "message",
+	[SCREEN_TEST] = "test",
 };
 
 enum page {
@@ -99,16 +113,20 @@ enum page {
 	PAGE_RF,
 	PAGE_STREAM,
 	PAGE_SYSTEM,
+	PAGE_HARDWARE,
 	PAGE_COUNT,
 };
 
 static const char *const page_titles[PAGE_COUNT] = {
-	"STATUS", "NETWORK", "RF", "STREAM", "SYSTEM",
+	"STATUS", "NETWORK", "RF", "STREAM", "SYSTEM", "HARDWARE",
 };
 
 enum item {
+	ITEM_GAIN,
 	ITEM_DISPLAY,
 	ITEM_NETWORK,
+	ITEM_HOST_LINK,
+	ITEM_ABOUT,
 	ITEM_REBOOT,
 	ITEM_FACTORY_RESET,
 	ITEM_CONTRAST,
@@ -120,30 +138,47 @@ enum item {
 	ITEM_NET_GW,
 	ITEM_NET_DNS,
 	ITEM_NET_SAVE,
+	ITEM_RX_MODE,
+	ITEM_LNA,
+	ITEM_PGA,
+	ITEM_TX_MODE,
+	ITEM_DAC,
+	ITEM_MIXER,
 	ITEM_BACK,
 };
 
 static const char *const item_labels[] = {
+	[ITEM_GAIN] = "RF gain",
 	[ITEM_DISPLAY] = "Display",     [ITEM_NETWORK] = "Network",
-	[ITEM_REBOOT] = "Reboot",       [ITEM_FACTORY_RESET] = "Factory reset",
+	[ITEM_HOST_LINK] = "Host link",
+	[ITEM_ABOUT] = "About",         [ITEM_REBOOT] = "Reboot",
+	[ITEM_FACTORY_RESET] = "Factory reset",
 	[ITEM_CONTRAST] = "Brightness", [ITEM_DIM] = "Dim after",
-	[ITEM_AUTO_PAGES] = "Auto pages", [ITEM_NET_MODE] = "Mode",
+	[ITEM_AUTO_PAGES] = "Auto pages",
+	[ITEM_NET_MODE] = "Mode",
 	[ITEM_NET_IP] = "IP",           [ITEM_NET_MASK] = "Mask",
 	[ITEM_NET_GW] = "GW",           [ITEM_NET_DNS] = "DNS",
-	[ITEM_NET_SAVE] = "Save+reboot", [ITEM_BACK] = "Back",
+	[ITEM_NET_SAVE] = "Save+reboot",
+	[ITEM_RX_MODE] = "RX gain",     [ITEM_LNA] = "LNA",
+	[ITEM_PGA] = "PGA",             [ITEM_TX_MODE] = "TX gain",
+	[ITEM_DAC] = "DAC",             [ITEM_MIXER] = "Mixer",
+	[ITEM_BACK] = "Back",
 };
 
 enum menu_id {
 	MENU_MAIN,
 	MENU_DISPLAY,
 	MENU_NETWORK,
+	MENU_GAIN,
 };
 
-static const uint8_t main_items[] = {ITEM_DISPLAY, ITEM_NETWORK, ITEM_REBOOT, ITEM_FACTORY_RESET,
-				     ITEM_BACK};
+static const uint8_t main_items[] = {ITEM_GAIN,  ITEM_DISPLAY, ITEM_NETWORK,       ITEM_HOST_LINK,
+				     ITEM_ABOUT, ITEM_REBOOT,  ITEM_FACTORY_RESET, ITEM_BACK};
 static const uint8_t display_items[] = {ITEM_CONTRAST, ITEM_DIM, ITEM_AUTO_PAGES, ITEM_BACK};
 static const uint8_t network_items[] = {ITEM_NET_MODE, ITEM_NET_IP,  ITEM_NET_MASK, ITEM_NET_GW,
 					ITEM_NET_DNS,  ITEM_NET_SAVE, ITEM_BACK};
+static const uint8_t gain_items[] = {ITEM_RX_MODE, ITEM_LNA,   ITEM_PGA,  ITEM_TX_MODE,
+				     ITEM_DAC,     ITEM_MIXER, ITEM_BACK};
 
 struct menu {
 	const char *title;
@@ -155,13 +190,27 @@ static const struct menu menus[] = {
 	[MENU_MAIN] = {"MENU", main_items, ARRAY_SIZE(main_items)},
 	[MENU_DISPLAY] = {"DISPLAY", display_items, ARRAY_SIZE(display_items)},
 	[MENU_NETWORK] = {"NETWORK", network_items, ARRAY_SIZE(network_items)},
+	[MENU_GAIN] = {"RF GAIN", gain_items, ARRAY_SIZE(gain_items)},
 };
+
+/* Position of an entry in a menu, to return to it from a submenu */
+static int menu_index(enum menu_id menu, enum item item)
+{
+	for (int i = 0; i < menus[menu].count; i++) {
+		if (menus[menu].items[i] == item) {
+			return i;
+		}
+	}
+
+	return 0;
+}
 
 enum confirm {
 	CONFIRM_REBOOT,
 	CONFIRM_FACTORY_RESET,
 	CONFIRM_FACTORY_RESET_AGAIN,
 	CONFIRM_NET_SAVE,
+	CONFIRM_HOST_LINK,
 };
 
 static const uint16_t dim_options_s[] = {0, 60, 120, 300, 600, 1800, 3600};
@@ -192,7 +241,6 @@ static struct {
 	int msg_sel;
 	int64_t screen_until;
 	int64_t last_input;
-	int64_t last_adjust;
 	int64_t page_since;
 	int64_t manual_until;
 	bool dimmed;
@@ -209,42 +257,92 @@ static uint8_t fb_sent[FB_SIZE];
 static bool fb_sent_valid;
 static bool write_failed;
 
-static void post_event(uint8_t type, uint8_t arg)
+static void post_event(uint8_t type, uint8_t arg, bool fast)
 {
-	struct ui_event ev = {.type = type, .arg = arg};
+	struct ui_event ev = {.type = type, .arg = arg, .fast = fast};
 
 	/* Inputs beyond the queue depth are dropped, the operator repeats them */
 	(void)k_msgq_put(&ui_events, &ev, K_NO_WAIT);
 }
 
 /*
- * Runs in the context of the reporting driver (INPUT_MODE_SYNCHRONOUS):
- * the work queue for buttons, the sampling timer for the encoder.
+ * Button handling. input_cb runs in the context of the reporting driver
+ * (INPUT_MODE_SYNCHRONOUS, the gpio-keys debounce work); the timers expire
+ * in interrupt context. Both only post events.
  */
+static atomic_t repeat_key;
+static int64_t repeat_since;
+static atomic_t long_fired;
+
+static void repeat_expiry(struct k_timer *timer)
+{
+	ARG_UNUSED(timer);
+
+	post_event(EV_KEY, (uint8_t)atomic_get(&repeat_key),
+		   k_uptime_get() - repeat_since >= FAST_AFTER_MS);
+}
+
+K_TIMER_DEFINE(repeat_timer, repeat_expiry, NULL);
+
+static void long_press_expiry(struct k_timer *timer)
+{
+	ARG_UNUSED(timer);
+
+	atomic_set(&long_fired, 1);
+	post_event(EV_KEY, DISPLAY_KEY_BACK, false);
+}
+
+K_TIMER_DEFINE(long_press_timer, long_press_expiry, NULL);
+
+static void arrow_input(enum display_ui_key key, bool pressed)
+{
+	if (pressed) {
+		/* The last pressed arrow repeats */
+		k_timer_stop(&repeat_timer);
+		atomic_set(&repeat_key, key);
+		repeat_since = k_uptime_get();
+		post_event(EV_KEY, key, false);
+		k_timer_start(&repeat_timer, K_MSEC(REPEAT_DELAY_MS), K_MSEC(REPEAT_MS));
+	} else if (atomic_get(&repeat_key) == key) {
+		k_timer_stop(&repeat_timer);
+	}
+}
+
+static void ok_input(bool pressed)
+{
+	if (pressed) {
+		atomic_set(&long_fired, 0);
+		k_timer_start(&long_press_timer, K_MSEC(LONG_PRESS_MS), K_NO_WAIT);
+		return;
+	}
+
+	/* After k_timer_stop() the expiry has either run completely or not at all */
+	k_timer_stop(&long_press_timer);
+	if (!atomic_get(&long_fired)) {
+		post_event(EV_KEY, DISPLAY_KEY_OK, false);
+	}
+}
+
 static void input_cb(struct input_event *evt, void *user_data)
 {
-	static int64_t press_start;
-
 	ARG_UNUSED(user_data);
 
-	if (evt->type == INPUT_EV_REL && evt->code == INPUT_REL_WHEEL) {
-		uint8_t key = (evt->value > 0) ? DISPLAY_KEY_NEXT : DISPLAY_KEY_PREV;
+	if (evt->type != INPUT_EV_KEY) {
+		return;
+	}
 
-		for (int i = 0; i < abs(evt->value); i++) {
-			post_event(EV_KEY, key);
-		}
-	} else if (evt->type == INPUT_EV_KEY && evt->code == INPUT_KEY_DOWN) {
-		if (evt->value != 0) {
-			post_event(EV_KEY, DISPLAY_KEY_NEXT);
-		}
-	} else if (evt->type == INPUT_EV_KEY && evt->code == INPUT_KEY_ENTER) {
-		if (evt->value != 0) {
-			press_start = k_uptime_get();
-		} else {
-			post_event(EV_KEY, (k_uptime_get() - press_start >= LONG_PRESS_MS)
-						   ? DISPLAY_KEY_BACK
-						   : DISPLAY_KEY_SELECT);
-		}
+	switch (evt->code) {
+	case INPUT_KEY_LEFT:
+		arrow_input(DISPLAY_KEY_LEFT, evt->value != 0);
+		break;
+	case INPUT_KEY_RIGHT:
+		arrow_input(DISPLAY_KEY_RIGHT, evt->value != 0);
+		break;
+	case INPUT_KEY_ENTER:
+		ok_input(evt->value != 0);
+		break;
+	default:
+		break;
 	}
 }
 
@@ -252,12 +350,12 @@ INPUT_CALLBACK_DEFINE(NULL, input_cb, NULL);
 
 void display_ui_inject(enum display_ui_key key)
 {
-	post_event(EV_KEY, (uint8_t)key);
+	post_event(EV_KEY, (uint8_t)key, false);
 }
 
 void display_ui_test_pattern(int seconds)
 {
-	post_event(EV_TEST, (uint8_t)CLAMP(seconds, 1, 60));
+	post_event(EV_TEST, (uint8_t)CLAMP(seconds, 1, 60), false);
 }
 
 void display_ui_get_info(struct display_ui_info *info)
@@ -298,9 +396,14 @@ static void text_right(int row, const char *str, bool invert)
 	fb_text(fb, row, FB_WIDTH - fb_text_width(str), str, invert);
 }
 
+static const char *link_short(enum phenix_host_link link)
+{
+	return (link == PHENIX_LINK_USB) ? "USB" : "ETH";
+}
+
 static void draw_header(const char *title, const struct ui_status *s)
 {
-	const char *link = (board_io_comm_mode() == BOARD_COMM_USB) ? "USB" : "ETH";
+	const char *link = link_short(config_store_boot_link());
 	int x = FB_WIDTH;
 
 	fb_text(fb, ROW_TITLE, 0, "PHENIX-1255", false);
@@ -401,7 +504,12 @@ static void draw_page_network(void)
 	line(2, "MAC %s", mac);
 	line(3, "Ctrl %u/tcp", cfg.ctrl_port);
 	line(4, "Data %u/udp", cfg.sample_port);
-	line(5, "Host link %s", board_comm_mode_str(board_io_comm_mode()));
+	if (config_store_get_link() != config_store_boot_link()) {
+		line(5, "Link %s, reboot: %s", link_short(config_store_boot_link()),
+		     link_short(config_store_get_link()));
+	} else {
+		line(5, "Host link %s", config_store_link_str(config_store_boot_link()));
+	}
 }
 
 static void draw_page_rf(void)
@@ -410,10 +518,11 @@ static void draw_page_rf(void)
 
 	sx1255_get_mode(&rx_on, &tx_on, &tx_drv);
 
-	line(0, "LNA %2d dB  PGA %2d dB", sx1255_get_gain(SX1255_GAIN_LNA),
-	     sx1255_get_gain(SX1255_GAIN_PGA));
-	line(1, "DAC %2d dB  MIX %2d dB", sx1255_get_gain(SX1255_GAIN_DAC),
-	     sx1255_get_gain(SX1255_GAIN_MIXER));
+	/* Gains in dB, with the gain source of the direction */
+	line(0, "RX %-4s LNA %2d PGA %2d", gain_ctrl_is_manual(SX1255_RX) ? "man" : "host",
+	     sx1255_get_gain(SX1255_GAIN_LNA), sx1255_get_gain(SX1255_GAIN_PGA));
+	line(1, "TX %-4s DAC %2d MIX %2d", gain_ctrl_is_manual(SX1255_TX) ? "man" : "host",
+	     sx1255_get_gain(SX1255_GAIN_DAC), sx1255_get_gain(SX1255_GAIN_MIXER));
 	line(2, "RX input  %s",
 	     (sx1255_get_rx_input() == SX1255_RX_INPUT_LOOPBACK) ? "loopback" : "antenna");
 	line(3, "TX driver %s", tx_drv ? "on" : "off");
@@ -447,6 +556,16 @@ static void draw_page_system(void)
 	line(5, "   %s", (strlen(serial) > 16U) ? &serial[16] : "");
 }
 
+static void draw_page_hardware(void)
+{
+	char bits[HW_ID_BITS + 1];
+
+	hw_id_bits_str(bits, sizeof(bits));
+
+	line(0, "Variant  %s", hw_id_name());
+	line(1, "HW ID    %d (%s)", hw_id_get(), bits);
+}
+
 static void draw_pages(const struct ui_status *s)
 {
 	char title[16];
@@ -468,8 +587,11 @@ static void draw_pages(const struct ui_status *s)
 		draw_page_stream(s);
 		break;
 	case PAGE_SYSTEM:
-	default:
 		draw_page_system();
+		break;
+	case PAGE_HARDWARE:
+	default:
+		draw_page_hardware();
 		break;
 	}
 }
@@ -500,6 +622,21 @@ static uint8_t *item_ipv4(enum item item)
 	}
 }
 
+static enum sx1255_gain item_gain(enum item item)
+{
+	switch (item) {
+	case ITEM_LNA:
+		return SX1255_GAIN_LNA;
+	case ITEM_PGA:
+		return SX1255_GAIN_PGA;
+	case ITEM_DAC:
+		return SX1255_GAIN_DAC;
+	case ITEM_MIXER:
+	default:
+		return SX1255_GAIN_MIXER;
+	}
+}
+
 static int dim_option_index(uint16_t seconds)
 {
 	for (int i = 0; i < ARRAY_SIZE(dim_options_s); i++) {
@@ -516,9 +653,23 @@ static void item_value(enum item item, char *buf, size_t len)
 	buf[0] = '\0';
 
 	switch (item) {
+	case ITEM_GAIN:
 	case ITEM_DISPLAY:
 	case ITEM_NETWORK:
+	case ITEM_ABOUT:
 		snprintf(buf, len, ">");
+		break;
+	case ITEM_RX_MODE:
+		snprintf(buf, len, "%s", gain_ctrl_is_manual(SX1255_RX) ? "Manual" : "Host");
+		break;
+	case ITEM_TX_MODE:
+		snprintf(buf, len, "%s", gain_ctrl_is_manual(SX1255_TX) ? "Manual" : "Host");
+		break;
+	case ITEM_LNA:
+	case ITEM_PGA:
+	case ITEM_DAC:
+	case ITEM_MIXER:
+		snprintf(buf, len, "%d dB", sx1255_get_gain(item_gain(item)));
 		break;
 	case ITEM_CONTRAST:
 		snprintf(buf, len, "%u", ui.cfg.contrast);
@@ -532,6 +683,9 @@ static void item_value(enum item item, char *buf, size_t len)
 		break;
 	case ITEM_AUTO_PAGES:
 		snprintf(buf, len, "%s", ui.cfg.auto_pages ? "on" : "off");
+		break;
+	case ITEM_HOST_LINK:
+		snprintf(buf, len, "%s", link_short(config_store_get_link()));
 		break;
 	case ITEM_NET_MODE:
 		snprintf(buf, len, "%s", ui.net.dhcp ? "DHCP" : "static");
@@ -685,15 +839,17 @@ static void open_confirm(enum confirm confirm)
 }
 
 /*
- * The flash driver programs and erases with interrupts locked, and an NVS
- * sector erase takes milliseconds: while a stream runs, saving is deferred
- * (update_timers) unless the device reboots anyway.
+ * config_store refuses flash writes while a stream runs (interrupts are
+ * locked during program and erase): saving is then retried from
+ * update_timers, or the stream is stopped first before a reboot.
  */
-static void save_display_cfg(bool force)
+static void save_display_cfg(void)
 {
-	if (ui.cfg_dirty && (force || !stream_is_running())) {
+	if (ui.cfg_dirty && !stream_is_running()) {
 		ui.cfg_dirty = false;
-		(void)config_store_set_display(&ui.cfg);
+		if (config_store_set_display(&ui.cfg) == -EBUSY) {
+			ui.cfg_dirty = true;
+		}
 	}
 }
 
@@ -702,16 +858,21 @@ static void menu_back(void)
 {
 	switch (ui.menu) {
 	case MENU_DISPLAY:
-		save_display_cfg(false);
-		open_menu(MENU_MAIN, 0);
+		save_display_cfg();
+		open_menu(MENU_MAIN, menu_index(MENU_MAIN, ITEM_DISPLAY));
 		break;
 	case MENU_NETWORK:
 		if (ui.net_dirty) {
 			ui.net_dirty = false;
-			show_message("NETWORK", "Changes discarded.", MENU_MAIN, 1);
+			show_message("NETWORK", "Changes discarded.", MENU_MAIN,
+				     menu_index(MENU_MAIN, ITEM_NETWORK));
 		} else {
-			open_menu(MENU_MAIN, 1);
+			open_menu(MENU_MAIN, menu_index(MENU_MAIN, ITEM_NETWORK));
 		}
+		break;
+	case MENU_GAIN:
+		/* Gain changes are saved by gain_ctrl */
+		open_menu(MENU_MAIN, menu_index(MENU_MAIN, ITEM_GAIN));
 		break;
 	case MENU_MAIN:
 	default:
@@ -726,6 +887,29 @@ static void menu_select(enum item item)
 	const char *reason;
 
 	switch (item) {
+	case ITEM_GAIN:
+		open_menu(MENU_GAIN, 0);
+		break;
+	case ITEM_RX_MODE:
+		(void)gain_ctrl_set_manual(SX1255_RX, !gain_ctrl_is_manual(SX1255_RX));
+		break;
+	case ITEM_TX_MODE:
+		(void)gain_ctrl_set_manual(SX1255_TX, !gain_ctrl_is_manual(SX1255_TX));
+		break;
+	case ITEM_LNA:
+	case ITEM_PGA:
+	case ITEM_DAC:
+	case ITEM_MIXER:
+		if (gain_ctrl_is_manual(gain_ctrl_dir(item_gain(item)))) {
+			ui.editing = true;
+		} else {
+			show_message("RF GAIN",
+				     (gain_ctrl_dir(item_gain(item)) == SX1255_RX)
+					     ? "Set by the host. Switch RX gain to Manual."
+					     : "Set by the host. Switch TX gain to Manual.",
+				     MENU_GAIN, ui.sel);
+		}
+		break;
 	case ITEM_DISPLAY:
 		open_menu(MENU_DISPLAY, 0);
 		break;
@@ -734,11 +918,17 @@ static void menu_select(enum item item)
 		ui.net_dirty = false;
 		open_menu(MENU_NETWORK, 0);
 		break;
+	case ITEM_ABOUT:
+		ui.screen = SCREEN_ABOUT;
+		break;
 	case ITEM_REBOOT:
 		open_confirm(CONFIRM_REBOOT);
 		break;
 	case ITEM_FACTORY_RESET:
 		open_confirm(CONFIRM_FACTORY_RESET);
+		break;
+	case ITEM_HOST_LINK:
+		open_confirm(CONFIRM_HOST_LINK);
 		break;
 	case ITEM_AUTO_PAGES:
 		ui.cfg.auto_pages = !ui.cfg.auto_pages;
@@ -789,6 +979,19 @@ static void menu_adjust(enum item item, int delta, bool fast)
 		ui.cfg.dim_timeout_s = dim_options_s[val];
 		ui.cfg_dirty = true;
 		break;
+	case ITEM_LNA:
+	case ITEM_PGA:
+	case ITEM_DAC:
+	case ITEM_MIXER: {
+		enum sx1255_gain g = item_gain(item);
+
+		/* Ends editing if the gain source was switched meanwhile (console) */
+		if (gain_ctrl_set(g, sx1255_get_gain(g) + delta * sx1255_gain_range(g)->step_db,
+				  NULL) == -EPERM) {
+			ui.editing = false;
+		}
+		break;
+	}
 	case ITEM_NET_MASK:
 		set_netmask_prefix(ui.net.netmask,
 				   CLAMP(netmask_prefix(ui.net.netmask) + delta, 1, 30));
@@ -806,20 +1009,19 @@ static void menu_adjust(enum item item, int delta, bool fast)
 	}
 }
 
-static void menu_key(enum display_ui_key key, int64_t now)
+static void menu_key(enum display_ui_key key, bool fast)
 {
 	const struct menu *m = &menus[ui.menu];
 	enum item item = m->items[ui.sel];
-	int delta = (key == DISPLAY_KEY_NEXT) ? 1 : -1;
+	int delta = (key == DISPLAY_KEY_RIGHT) ? 1 : -1;
 
 	if (ui.editing) {
 		switch (key) {
-		case DISPLAY_KEY_NEXT:
-		case DISPLAY_KEY_PREV:
-			menu_adjust(item, delta, now - ui.last_adjust < FAST_TURN_MS);
-			ui.last_adjust = now;
+		case DISPLAY_KEY_RIGHT:
+		case DISPLAY_KEY_LEFT:
+			menu_adjust(item, delta, fast);
 			break;
-		case DISPLAY_KEY_SELECT:
+		case DISPLAY_KEY_OK:
 			if (item_ipv4(item) != NULL && ui.octet < 3) {
 				ui.octet++;
 			} else {
@@ -835,12 +1037,12 @@ static void menu_key(enum display_ui_key key, int64_t now)
 	}
 
 	switch (key) {
-	case DISPLAY_KEY_NEXT:
-	case DISPLAY_KEY_PREV:
+	case DISPLAY_KEY_RIGHT:
+	case DISPLAY_KEY_LEFT:
 		ui.sel = CLAMP(ui.sel + delta, 0, m->count - 1);
 		menu_scroll();
 		break;
-	case DISPLAY_KEY_SELECT:
+	case DISPLAY_KEY_OK:
 		menu_select(item);
 		break;
 	case DISPLAY_KEY_BACK:
@@ -851,6 +1053,12 @@ static void menu_key(enum display_ui_key key, int64_t now)
 }
 
 /* Confirmation dialogs */
+
+static enum phenix_host_link other_link(void)
+{
+	return (config_store_get_link() == PHENIX_LINK_USB) ? PHENIX_LINK_ETHERNET
+							     : PHENIX_LINK_USB;
+}
 
 static void draw_confirm(const struct ui_status *s)
 {
@@ -865,8 +1073,8 @@ static void draw_confirm(const struct ui_status *s)
 	case CONFIRM_FACTORY_RESET:
 		draw_header("RESET", s);
 		line(0, "Erase all settings?");
-		line(1, "Network and display");
-		line(2, "return to defaults.");
+		line(1, "Network, display and");
+		line(2, "host link to defaults");
 		break;
 	case CONFIRM_FACTORY_RESET_AGAIN:
 		draw_header("RESET", s);
@@ -877,6 +1085,11 @@ static void draw_confirm(const struct ui_status *s)
 		draw_header("NETWORK", s);
 		line(0, "Save the network");
 		line(1, "settings and reboot?");
+		break;
+	case CONFIRM_HOST_LINK:
+		draw_header("HOST LINK", s);
+		line(0, "Switch host link to");
+		line(1, "%s and reboot?", config_store_link_str(other_link()));
 		break;
 	}
 
@@ -903,17 +1116,23 @@ static void reboot_now(bool factory_reset)
 	control_reboot(factory_reset);
 }
 
+/*
+ * Left and Right pick the answer drawn on that side instead of toggling,
+ * so a held or repeated button cannot end on Yes by accident.
+ */
 static void confirm_key(enum display_ui_key key)
 {
 	switch (key) {
-	case DISPLAY_KEY_NEXT:
-	case DISPLAY_KEY_PREV:
-		ui.confirm_yes = !ui.confirm_yes;
+	case DISPLAY_KEY_LEFT:
+		ui.confirm_yes = false;
+		return;
+	case DISPLAY_KEY_RIGHT:
+		ui.confirm_yes = true;
 		return;
 	case DISPLAY_KEY_BACK:
 		ui.confirm_yes = false;
 		break;
-	case DISPLAY_KEY_SELECT:
+	case DISPLAY_KEY_OK:
 	default:
 		break;
 	}
@@ -925,7 +1144,8 @@ static void confirm_key(enum display_ui_key key)
 
 	switch (ui.confirm) {
 	case CONFIRM_REBOOT:
-		save_display_cfg(true);
+		control_shutdown();
+		save_display_cfg();
 		reboot_now(false);
 		break;
 	case CONFIRM_FACTORY_RESET:
@@ -935,12 +1155,23 @@ static void confirm_key(enum display_ui_key key)
 		reboot_now(true);
 		break;
 	case CONFIRM_NET_SAVE:
-		save_display_cfg(true);
+		/* Flash writes need a stopped stream; the session ends also if saving fails */
+		control_shutdown();
+		save_display_cfg();
 		if (config_store_set_net(&ui.net) < 0) {
 			show_message("NOT SAVED", "Saving failed.", MENU_NETWORK, ui.sel);
 			break;
 		}
 		ui.net_dirty = false;
+		reboot_now(false);
+		break;
+	case CONFIRM_HOST_LINK:
+		control_shutdown();
+		save_display_cfg();
+		if (config_store_set_link(other_link()) < 0) {
+			show_message("NOT SAVED", "Saving failed.", MENU_MAIN, ui.sel);
+			break;
+		}
 		reboot_now(false);
 		break;
 	}
@@ -956,13 +1187,31 @@ static void draw_message(const struct ui_status *s)
 	}
 }
 
+/* Shared by the start screen and About */
+static void draw_logo(void)
+{
+	const int yellow_height = ROW_BODY * 8;
+
+	fb_bitmap(fb, (FB_WIDTH - splash_title.width) / 2,
+		  (yellow_height - splash_title.height) / 2, &splash_title);
+	fb_bitmap(fb, SPLASH_LOGO_X, yellow_height, &splash_phoenix);
+	fb_text(fb, ROW_BODY + 1, SPLASH_TEXT_X, "SX1255 SDR", false);
+	fb_text(fb, ROW_BODY + 2, SPLASH_TEXT_X, "FW " APP_VERSION_STRING, false);
+}
+
 static void draw_splash(void)
 {
-	fb_text(fb, ROW_TITLE, (FB_WIDTH - fb_text_width("PHENIX-1255")) / 2, "PHENIX-1255",
-		false);
-	line(1, "  SX1255 transceiver");
-	line(3, "  FW %s", APP_VERSION_EXTENDED_STRING);
-	line(4, "  Starting ...");
+	draw_logo();
+	fb_text(fb, ROW_BODY + 4, SPLASH_TEXT_X, "Starting ...", false);
+}
+
+static void draw_about(void)
+{
+	char hw[FB_COLS + 1];
+
+	draw_logo();
+	snprintf(hw, sizeof(hw), "HW %s", hw_id_name());
+	fb_text(fb, ROW_BODY + 3, SPLASH_TEXT_X, hw, false);
 }
 
 /* Marks the colour zones: yellow rows 0..15 lit, blue rows 16..63 framed */
@@ -1036,6 +1285,9 @@ static void render(void)
 	case SCREEN_MENU:
 		draw_menu(&s);
 		break;
+	case SCREEN_ABOUT:
+		draw_about();
+		break;
 	case SCREEN_CONFIRM:
 		draw_confirm(&s);
 		break;
@@ -1070,23 +1322,27 @@ static void wake(int64_t now)
 	}
 }
 
-static void handle_key(enum display_ui_key key, int64_t now)
+static void handle_key(enum display_ui_key key, bool fast, int64_t now)
 {
 	switch (ui.screen) {
 	case SCREEN_PAGES:
-		if (key == DISPLAY_KEY_SELECT) {
+		if (key == DISPLAY_KEY_OK) {
 			open_menu(MENU_MAIN, 0);
 		} else if (key == DISPLAY_KEY_BACK) {
 			ui.page = PAGE_STATUS;
 		} else {
-			ui.page = (ui.page + ((key == DISPLAY_KEY_NEXT) ? 1 : PAGE_COUNT - 1)) %
+			ui.page = (ui.page + ((key == DISPLAY_KEY_RIGHT) ? 1 : PAGE_COUNT - 1)) %
 				  PAGE_COUNT;
 			ui.manual_until = now + MANUAL_HOLD_MS;
 		}
 		ui.page_since = now;
 		break;
 	case SCREEN_MENU:
-		menu_key(key, now);
+		menu_key(key, fast);
+		break;
+	case SCREEN_ABOUT:
+		/* The selection is unchanged, so this returns to the About entry */
+		ui.screen = SCREEN_MENU;
 		break;
 	case SCREEN_CONFIRM:
 		confirm_key(key);
@@ -1118,7 +1374,7 @@ static void handle_event(const struct ui_event *ev, int64_t now)
 	wake(now);
 	/* The first input on a dimmed display only brightens it */
 	if (!was_dimmed) {
-		handle_key((enum display_ui_key)ev->arg, now);
+		handle_key((enum display_ui_key)ev->arg, ev->fast, now);
 	}
 }
 
@@ -1139,7 +1395,7 @@ static void update_timers(int64_t now)
 
 	/* Deferred save, once the stream has stopped and the menu is closed */
 	if (ui.cfg_dirty && !(ui.screen == SCREEN_MENU && ui.menu == MENU_DISPLAY)) {
-		save_display_cfg(false);
+		save_display_cfg();
 	}
 
 	switch (ui.screen) {
@@ -1157,9 +1413,10 @@ static void update_timers(int64_t now)
 		}
 		break;
 	case SCREEN_MENU:
+	case SCREEN_ABOUT:
 	case SCREEN_CONFIRM:
 		if (now - ui.last_input >= MENU_TIMEOUT_MS) {
-			save_display_cfg(false);
+			save_display_cfg();
 			ui.net_dirty = false;
 			ui.screen = SCREEN_PAGES;
 			ui.page_since = now;
@@ -1209,7 +1466,7 @@ static void ui_thread(void *p1, void *p2, void *p3)
 
 		if (k_msgq_get(&ui_events, &ev, K_MSEC(REFRESH_MS)) == 0) {
 			handle_event(&ev, k_uptime_get());
-			/* Apply queued inputs before drawing, e.g. a fast encoder turn */
+			/* Apply queued inputs before drawing, e.g. fast repeated steps */
 			while (k_msgq_get(&ui_events, &ev, K_NO_WAIT) == 0) {
 				handle_event(&ev, k_uptime_get());
 			}
@@ -1229,4 +1486,37 @@ int display_ui_start(void)
 	k_thread_start(ui_tid);
 
 	return 0;
+}
+
+void display_ui_show_hw_error(void)
+{
+	char bits[HW_ID_BITS + 1];
+	char supported[FB_COLS + 1];
+
+	if (!device_is_ready(disp)) {
+		return;
+	}
+
+	hw_id_bits_str(bits, sizeof(bits));
+	hw_id_supported_str(supported, sizeof(supported));
+
+	fb_clear(fb);
+	fb_text(fb, ROW_TITLE, 0, "PHENIX-1255", false);
+	fb_text(fb, ROW_SUB, 0, "HARDWARE ERROR", false);
+	line(0, "Unsupported hardware");
+	if (hw_id_get() < 0) {
+		line(1, "HW ID not readable");
+	} else {
+		line(1, "HW ID %d (%s)", hw_id_get(), bits);
+	}
+	line(2, "Supported: %s", supported);
+	line(4, "Start-up halted");
+	line(5, "See console");
+
+	/* The panel keeps its last image across an MCU reset; always overwrite it */
+	(void)display_set_pixel_format(disp, PIXEL_FORMAT_MONO01);
+	set_contrast(PHENIX_DEFAULT_DISPLAY_CONTRAST * CONTRAST_STEP);
+	fb_sent_valid = false;
+	flush();
+	(void)display_blanking_off(disp);
 }

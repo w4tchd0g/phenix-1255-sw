@@ -34,8 +34,10 @@ with the same sequence number. Notable behaviour:
   the SX1255 TX driver; disable switches both off and clears the TX buffer.
 - `SET_RATE` returns `EBUSY` while a stream runs.
 - A stream fault (SAI FIFO error) switches the PA off in the stream module;
-  the control module then marks the streams stopped, lights the red LED and
-  sends the events "stream stopped" and "PA switched off" to the host.
+  the control module then marks the streams stopped, switches TX off once
+  more, lights the red LED and sends the events "stream stopped" and "PA
+  switched off" to the host. `STREAM_TX` enable and the stream stop share
+  the stream lock, so a fault during `STREAM_TX` cannot leave the PA on.
 
 ## Reboot
 
@@ -43,3 +45,8 @@ with the same sequence number. Notable behaviour:
 It closes the session (the host sees the session end), switches the PA off,
 optionally erases the settings partition (factory reset) and reboots after a
 short delay that lets the TCP close and the log output complete.
+
+`control_shutdown()` is the first part of it: session closed, stream
+stopped, PA off. The web interface and the menu call it before they save
+settings that need a reboot, since flash writes are refused while a stream
+runs ([config.md](../../config/_doc/config.md#flash-writes-and-streaming)).

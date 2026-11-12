@@ -26,7 +26,6 @@ LOG_MODULE_REGISTER(board_io, LOG_LEVEL_INF);
 
 /* Boot input sampling */
 #define INPUT_SETTLE_US       1000
-#define COMM_SEL_SAMPLES      5
 #define FACTORY_RST_SAMPLES   10
 #define INPUT_SAMPLE_INTERVAL K_MSEC(5)
 
@@ -43,14 +42,14 @@ LOG_MODULE_REGISTER(board_io, LOG_LEVEL_INF);
 #define PA_EN_PIN   DT_GPIO_PIN(USER_NODE, pa_en_gpios)
 #define PA_EN_FLAGS DT_GPIO_FLAGS(USER_NODE, pa_en_gpios)
 
-BUILD_ASSERT(DT_SAME_NODE(PA_EN_CTLR, DT_NODELABEL(gpio2)),
-	     "pa_en_early_off() enables the GPIO2 clock only");
+BUILD_ASSERT(DT_SAME_NODE(PA_EN_CTLR, DT_NODELABEL(gpio1)),
+	     "pa_en_early_off() enables the GPIO1 clock only");
 
 static int pa_en_early_off(void)
 {
 	GPIO_Type *gpio = (GPIO_Type *)DT_REG_ADDR(PA_EN_CTLR);
 
-	CLOCK_EnableClock(kCLOCK_Gpio2);
+	CLOCK_EnableClock(kCLOCK_Gpio1);
 
 	if (PA_EN_FLAGS & GPIO_ACTIVE_LOW) {
 		gpio->PSOR = BIT(PA_EN_PIN);
@@ -65,22 +64,20 @@ static int pa_en_early_off(void)
 SYS_INIT(pa_en_early_off, EARLY, 0);
 
 static const struct gpio_dt_spec pa_en = GPIO_DT_SPEC_GET(USER_NODE, pa_en_gpios);
-static const struct gpio_dt_spec comm_sel = GPIO_DT_SPEC_GET(USER_NODE, comm_sel_gpios);
 static const struct gpio_dt_spec factory_rst = GPIO_DT_SPEC_GET(USER_NODE, factory_reset_gpios);
 
 static const struct gpio_dt_spec leds[BOARD_LED_COUNT] = {
 	[BOARD_LED_ERR] = GPIO_DT_SPEC_GET(DT_ALIAS(led_err), gpios),
-	[BOARD_LED_WARN] = GPIO_DT_SPEC_GET(DT_ALIAS(led_warn), gpios),
+	[BOARD_LED_INFO] = GPIO_DT_SPEC_GET(DT_ALIAS(led_info), gpios),
 	[BOARD_LED_OK] = GPIO_DT_SPEC_GET(DT_ALIAS(led_ok), gpios),
 };
 
-static const char *const led_names[BOARD_LED_COUNT] = {"ERR", "WARN", "OK"};
+static const char *const led_names[BOARD_LED_COUNT] = {"ERR", "INFO", "OK"};
 
 static atomic_t led_mode[BOARD_LED_COUNT];
 static atomic_t led_flash_ticks[BOARD_LED_COUNT];
 static uint32_t led_tick;
 
-static enum board_comm_mode comm_mode;
 static bool factory_reset_requested;
 static atomic_t pa_enabled;
 
@@ -144,8 +141,7 @@ int board_io_init(void)
 {
 	int ret;
 
-	if (!gpio_is_ready_dt(&pa_en) || !gpio_is_ready_dt(&comm_sel) ||
-	    !gpio_is_ready_dt(&factory_rst)) {
+	if (!gpio_is_ready_dt(&pa_en) || !gpio_is_ready_dt(&factory_rst)) {
 		LOG_ERR("GPIO controller not ready");
 		return -ENODEV;
 	}
@@ -169,24 +165,14 @@ int board_io_init(void)
 		}
 	}
 
-	ret = gpio_pin_configure_dt(&comm_sel, GPIO_INPUT);
-	if (ret == 0) {
-		ret = gpio_pin_configure_dt(&factory_rst, GPIO_INPUT);
-	}
+	ret = gpio_pin_configure_dt(&factory_rst, GPIO_INPUT);
 	if (ret < 0) {
 		LOG_ERR("Input configuration failed (%d)", ret);
 		return ret;
 	}
 
-	/* Let the internal pull-ups charge the input lines */
+	/* Let the internal pull-up charge the input line */
 	k_busy_wait(INPUT_SETTLE_US);
-
-	/* COMM_SEL: majority vote */
-	ret = sample_input(&comm_sel, COMM_SEL_SAMPLES);
-	if (ret < 0) {
-		return ret;
-	}
-	comm_mode = (ret > COMM_SEL_SAMPLES / 2) ? BOARD_COMM_USB : BOARD_COMM_ETHERNET;
 
 	/* Factory reset: button must be held for the whole sampling window */
 	ret = sample_input(&factory_rst, FACTORY_RST_SAMPLES);
@@ -197,7 +183,6 @@ int board_io_init(void)
 
 	k_timer_start(&led_timer, K_MSEC(LED_TICK_MS), K_MSEC(LED_TICK_MS));
 
-	LOG_INF("COMM_SEL: %s", board_comm_mode_str(comm_mode));
 	if (factory_reset_requested) {
 		LOG_WRN("SW2 held during boot: factory reset requested");
 	}
@@ -205,24 +190,9 @@ int board_io_init(void)
 	return 0;
 }
 
-enum board_comm_mode board_io_comm_mode(void)
-{
-	return comm_mode;
-}
-
-int board_io_comm_sel_level(void)
-{
-	return gpio_pin_get_raw(comm_sel.port, comm_sel.pin);
-}
-
 bool board_io_factory_reset_requested(void)
 {
 	return factory_reset_requested;
-}
-
-const char *board_comm_mode_str(enum board_comm_mode mode)
-{
-	return (mode == BOARD_COMM_USB) ? "HS USB" : "Ethernet";
 }
 
 void board_led_set(enum board_led led, enum board_led_mode mode)

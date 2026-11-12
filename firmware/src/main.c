@@ -9,6 +9,7 @@
 #include <zephyr/app_version.h>
 
 #include "board/board_io.h"
+#include "board/hw_id.h"
 #include "board/watchdog.h"
 #include "config/config_store.h"
 #include "control/control.h"
@@ -16,6 +17,7 @@
 #include "ethernet/net_config.h"
 #include "ethernet/transport_eth.h"
 #include "ethernet/web_ui.h"
+#include "radio/gain_ctrl.h"
 #include "radio/sx1255.h"
 #include "stream/sample_io.h"
 #include "stream/stream.h"
@@ -34,6 +36,16 @@ int main(void)
 
 	LOG_INF("Phenix-1255 firmware %s (Zephyr %s)", APP_VERSION_EXTENDED_STRING,
 		KERNEL_VERSION_STRING);
+
+	/*
+	 * Before any other pin is driven: on unknown hardware only the early
+	 * PA_EN shutdown and the error screen on the display (whose driver is
+	 * already initialized) touch the board.
+	 */
+	if (hw_id_init() < 0) {
+		display_ui_show_hw_error();
+		hw_id_halt();
+	}
 
 	ret = board_io_init();
 	if (ret < 0) {
@@ -60,11 +72,11 @@ int main(void)
 	if (factory_reset) {
 		/* All LEDs blink fast to acknowledge the reset */
 		board_led_set(BOARD_LED_ERR, BOARD_LED_BLINK_FAST);
-		board_led_set(BOARD_LED_WARN, BOARD_LED_BLINK_FAST);
+		board_led_set(BOARD_LED_INFO, BOARD_LED_BLINK_FAST);
 		board_led_set(BOARD_LED_OK, BOARD_LED_BLINK_FAST);
 		k_sleep(FACTORY_RESET_INDICATION);
 		board_led_set(BOARD_LED_ERR, BOARD_LED_OFF);
-		board_led_set(BOARD_LED_WARN, BOARD_LED_OFF);
+		board_led_set(BOARD_LED_INFO, BOARD_LED_OFF);
 	}
 
 	ret = sx1255_init();
@@ -72,6 +84,7 @@ int main(void)
 		LOG_ERR("SX1255 init failed (%d)", ret);
 		board_led_set(BOARD_LED_ERR, BOARD_LED_ON);
 	}
+	gain_ctrl_init();
 
 	ret = stream_init();
 	if (ret < 0) {
@@ -91,7 +104,9 @@ int main(void)
 	web_ui_start();
 	display_ui_start();
 
-	if (board_io_comm_mode() == BOARD_COMM_ETHERNET) {
+	/* Switching the link at runtime is not supported; it applies after a reboot */
+	if (config_store_boot_link() == PHENIX_LINK_ETHERNET) {
+		LOG_INF("Host link: Ethernet");
 		transport_eth_start(net_cfg.ctrl_port, net_cfg.sample_port);
 	} else {
 		LOG_INF("Host link: HS USB");

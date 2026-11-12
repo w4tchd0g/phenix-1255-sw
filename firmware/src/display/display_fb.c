@@ -117,6 +117,29 @@ void fb_clear(uint8_t *fb)
 	memset(fb, 0, FB_SIZE);
 }
 
+void fb_bitmap(uint8_t *fb, int x, int y, const struct fb_bitmap *bm)
+{
+	int stride = (bm->width + 7) / 8;
+
+	for (int r = 0; r < bm->height; r++) {
+		int py = y + r;
+
+		if (py < 0 || py >= FB_HEIGHT) {
+			continue;
+		}
+		for (int c = 0; c < bm->width; c++) {
+			int px = x + c;
+
+			if (px < 0 || px >= FB_WIDTH) {
+				continue;
+			}
+			if (bm->bits[r * stride + c / 8] & BIT(7 - (c % 8))) {
+				fb[(py / 8) * FB_WIDTH + px] |= BIT(py % 8);
+			}
+		}
+	}
+}
+
 void fb_fill(uint8_t *fb, int row, int x0, int x1, bool on)
 {
 	if (row < 0 || row >= FB_ROWS) {

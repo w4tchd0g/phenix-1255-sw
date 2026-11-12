@@ -60,7 +60,7 @@ timing-critical driver, not the base station software.
 > [!NOTE]
 > **Status:** firmware 0.1.0-dev. The target hardware is the
 > [phenix-1255-hw](https://github.com/labdvm/Phenix-1255-HW) board on the FRDM-MCXN947 (SX1255, status LEDs, PA
-> enable MOSFET, OLED display and rotary encoder). The first tests were made with a µCell board
+> enable MOSFET, OLED display and three buttons). The first tests were made with a µCell board
 > wired to the FRDM-MCXN947: streaming over HS USB and Ethernet, the front
 > panel display and over-the-air operation with FlowStation work. A µCell
 > board or another SX1255 board built the same way is therefore usable as
@@ -76,7 +76,7 @@ timing-critical driver, not the base station software.
 | Transceiver | Semtech SX1255, 400 to 510 MHz, 38.4 MHz TCXO, full duplex |
 | Sample rates | 600 (default), 300, 150, 75, 50, 25 kHz |
 | Timing | Shared 64-bit RX/TX sample counter, exact timed TX, constant TX-to-RX loop delay |
-| Host link | HS USB (vendor class, bulk) or Ethernet (TCP control, UDP samples), selected by the `COMM_SEL` switch |
+| Host link | HS USB (vendor class, bulk) or Ethernet (TCP control, UDP samples), selected in the front panel menu, web interface or console |
 | Host software | SoapySDR module for Linux and macOS, patches for TETRA-Bluestation and FlowStation |
 | Safety | PA enable only while TX streams, immediate shutdown on link loss or errors, hardware watchdog |
 
@@ -102,11 +102,15 @@ an exact sample. Details: [architecture.md](_doc/architecture.md).
 - SX1255 with 38.4 MHz reference, independent RX and TX synthesizers.
 - Sample counter derived from the SAI DMA position; every RX packet carries
   its counter value, timed TX packets are emitted exactly at their sample.
+- RX and TX gains set by the host software (e.g. FlowStation) or manually on
+  the device, selectable per direction (see
+  [radio.md](firmware/src/radio/_doc/radio.md#gain-source)).
 - Constant TX-to-RX loop delay per rate (see
   [stream.md](firmware/src/stream/_doc/stream.md#tx-to-rx-loop-delay)).
 
 **Host link**
-- HS USB or Ethernet, selected at boot by the `COMM_SEL` switch.
+- HS USB (factory default) or Ethernet, selected in the front panel menu,
+  the web interface or on the console; applied with a reboot.
 - Ethernet: DHCP with fallback to `192.168.2.10/24`, static configuration,
   mDNS name `phenix-1255.local`, web interface for the network settings
   (active in both modes).
@@ -115,11 +119,13 @@ an exact sample. Details: [architecture.md](_doc/architecture.md).
 - PA enable output switched only on TX stream start/stop, with immediate
   shutdown on link loss or errors; hardware watchdog.
 - Factory reset by holding SW2 during boot.
+- Hardware variant detection (HW_ID pins); the firmware does not
+  start on unsupported hardware.
 
 **Front panel**
 - 0.96" SSD1306 OLED with status pages (frequencies, link, network, gains,
-  counters) and a menu operated with a rotary encoder for display, network,
-  reboot and factory reset settings.
+  counters) and a menu operated with three buttons (Left, OK, Right) for
+  RF gain, display, network, host link, reboot and factory reset settings.
 
 **Host software**
 - SoapySDR module for Linux and macOS: timestamps on every read, exact timed
@@ -144,14 +150,17 @@ Linux or macOS host. The linked documents contain the details.
   [hardware.md](_doc/hardware.md#pin-assignment) (reduced feature set, see
   [hardware.md](_doc/hardware.md#µcell-and-compatible-boards)).
 - USB cable to J17 (MCU-Link) for flashing and the console.
-- Host link, selected by the `COMM_SEL` switch when the board boots:
+- Host link, a stored setting that takes effect after a reboot:
 
-  | `COMM_SEL` (P2_7) | Host link | Connection |
-  |---|---|---|
-  | Open (high) | HS USB | HS USB port of the FRDM-MCXN947 |
-  | Closed to GND (low) | Ethernet | Ethernet port, network with DHCP or 192.168.2.0/24 |
+  | Host link | Connection |
+  |---|---|
+  | HS USB (factory default) | HS USB port of the FRDM-MCXN947 |
+  | Ethernet | Ethernet port, network with DHCP or 192.168.2.0/24 |
 
-  Ethernet and the web interface are active in both modes.
+  Switch it with *Host link* in the front panel menu, the *Host link* field
+  of the web interface or `phenix config set link <usb|ethernet>` on the
+  console ([config.md](firmware/src/config/_doc/config.md#host-link)).
+  Ethernet and the web interface are active with both settings.
 
 ### 2. Build and flash the firmware
 
@@ -232,8 +241,10 @@ build/soapy/phx_soapy_test rx "driver=phenix-1255" 10              # 10 s RX che
 On Ethernet the device uses DHCP. Without a lease after 30 s it adds the
 fallback address **192.168.2.10/24** (yellow LED on). The web interface at
 `http://phenix-1255.local/` (or the device IP address) shows the status and
-changes the network settings; it has no authentication, so use the device on
-a trusted network only. Holding SW2 during boot restores the factory
+changes the host link and network settings; it has no authentication, so use the device on
+a trusted network only. Settings are saved only when the page was opened via
+the device IP address or `phenix-1255.local`, which keeps pages of other
+sites from changing them. Holding SW2 during boot restores the factory
 defaults.
 
 | Device argument | Default | Description |
@@ -248,7 +259,9 @@ All arguments are listed in [soapy.md](soapy/_doc/soapy.md#device-arguments).
 
 Both stations open SoapySDR devices and detect the Phenix-1255 by its driver
 key once the patch from [`patches/`](patches/_doc/patches.md) is applied. The
-patch sets the sample rate (600 kHz), antennas and gains.
+patch sets the sample rate (600 kHz), antennas and gains. To set the gains
+on the device instead, switch *RX gain* and/or *TX gain* to Manual in the
+*RF gain* menu; the station's gain settings are then ignored.
 
 <details open>
 <summary><b>FlowStation</b></summary>
@@ -316,11 +329,12 @@ as well.
 
 | Command | Shows or does |
 |---|---|
-| `phenix status` | Host link selected by `COMM_SEL`, PA state |
+| `phenix status` | Host link in use (and the stored one until the reboot), PA state |
 | `sx1255 info` | Frequencies, sample rate, gains, PLL lock, RX input |
+| `phenix gain` | Gain source (host or manual) and gains of RX and TX |
 | `stream status` | Sample counter, dropped RX samples, late/early TX packets, FIFO and frame sync errors |
 | `stream rxstats` | RX level, DC offset and dominant tone of the received signal (while a stream runs) |
-| `phenix config show` | Stored network configuration |
+| `phenix config show` | Stored network configuration and host link |
 | `net iface` | Current IP address, link state and MAC address |
 | `net ping 192.168.2.1` | Reachability of a host from the device |
 | `phenix display dump` | Front panel content as text |
@@ -349,7 +363,7 @@ transmitting tests. All commands: [shell.md](firmware/src/shell/_doc/shell.md).
 | Linux: device listed with "no access" | udev rule not installed, see [step 3](#3-build-the-soapysdr-module) |
 | Station or `SoapySDRUtil` does not find `phenix-1255` | Module not installed and `SOAPY_SDR_PLUGIN_PATH` not set; `SoapySDRUtil --info` lists the search paths and loaded modules |
 | `SoapySDRUtil --find` does not list the Ethernet device | A generic enumeration does not search the network; pass `driver=phenix-1255` or `addr=...` |
-| Ethernet: web interface works, but SoapySDR cannot connect | `COMM_SEL` is open (HS USB), the control and sample channels run over USB only; set the switch to GND (Ethernet) and reset the board |
+| Ethernet: web interface works, but SoapySDR cannot connect | The host link is set to HS USB (factory default), the control and sample channels run over USB only; set *Host link* to Ethernet in the menu, the web interface or with `phenix config set link ethernet` and reboot |
 | Second application is rejected | Only one host session at a time is supported |
 | `phenix-1255.local` resolves slowly on macOS | macOS also asks for an IPv6 address; use the IP address |
 | Device unreachable after changing the network settings | Hold SW2 during boot (factory reset) or use `phenix config` on the console, see [ethernet.md](firmware/src/ethernet/_doc/ethernet.md) |
@@ -361,7 +375,7 @@ transmitting tests. All commands: [shell.md](firmware/src/shell/_doc/shell.md).
 | `firmware/` | Zephyr application for the FRDM-MCXN947, one folder per module in `firmware/src/` |
 | `common/` | Wire protocol definitions shared by firmware and host |
 | `soapy/` | SoapySDR module, test programs in `soapy/tests/`, udev rule in `soapy/udev/` |
-| `tools/` | Protocol test client |
+| `tools/` | Protocol test client, logo converter for the front panel start screen |
 | `patches/` | Patches for TETRA-Bluestation and FlowStation |
 | `_doc/`, `*/_doc/` | Documentation, next to the code it describes |
 | `west.yml` | West manifest pinning the Zephyr revision |
@@ -377,7 +391,7 @@ code.
 | Firmware | [Structure, threads, memory, PA safety](firmware/_doc/firmware.md) |
 | Firmware modules | [Board I/O](firmware/src/board/_doc/board.md) · [Configuration](firmware/src/config/_doc/config.md) · [SX1255](firmware/src/radio/_doc/radio.md) · [Sample stream and timing](firmware/src/stream/_doc/stream.md) · [Control](firmware/src/control/_doc/control.md) · [Ethernet](firmware/src/ethernet/_doc/ethernet.md) · [HS USB and test PID](firmware/src/usb/_doc/usb.md) · [Front panel](firmware/src/display/_doc/display.md) · [Console commands](firmware/src/shell/_doc/shell.md) |
 | Protocol | [Wire protocol](common/_doc/protocol.md) |
-| Host | [SoapySDR module](soapy/_doc/soapy.md) · [Test programs](soapy/tests/_doc/tests.md) · [Protocol test client](tools/_doc/phx_client.md) |
+| Host | [SoapySDR module](soapy/_doc/soapy.md) · [Test programs](soapy/tests/_doc/tests.md) · [Protocol test client](tools/_doc/phx_client.md) · [Logo converter](tools/_doc/logo_to_c.md) |
 | Stations | [Patches for TETRA-Bluestation and FlowStation](patches/_doc/patches.md) |
 
 ## Acknowledgements

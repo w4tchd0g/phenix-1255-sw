@@ -2,8 +2,7 @@
  * SPDX-License-Identifier: MIT
  * Copyright (c) 2026 Phenix-1255 contributors
  *
- * Board-level I/O: status LEDs, PA enable, COMM_SEL switch and the
- * factory reset button.
+ * Board-level I/O: status LEDs, PA enable and the factory reset button.
  */
 
 #ifndef PHENIX_BOARD_IO_H_
@@ -11,16 +10,10 @@
 
 #include <stdbool.h>
 
-/** Host link selected by the COMM_SEL switch at boot. */
-enum board_comm_mode {
-	BOARD_COMM_ETHERNET,
-	BOARD_COMM_USB,
-};
-
 enum board_led {
-	BOARD_LED_ERR,  /**< LED0, red */
-	BOARD_LED_WARN, /**< LED1, yellow */
-	BOARD_LED_OK,   /**< LED2, green */
+	BOARD_LED_ERR,  /**< LED2, red */
+	BOARD_LED_INFO, /**< LED1, yellow */
+	BOARD_LED_OK,   /**< LED0, green */
 	BOARD_LED_COUNT,
 };
 
@@ -39,19 +32,8 @@ enum board_led_mode {
  */
 int board_io_init(void);
 
-/** COMM_SEL state sampled during board_io_init(). */
-enum board_comm_mode board_io_comm_mode(void);
-
-/**
- * Current physical level of the COMM_SEL input (1 = high, 0 = low,
- * negative on error). Diagnostic only; the active mode is fixed at boot.
- */
-int board_io_comm_sel_level(void);
-
 /** True if SW2 was held during board_io_init(). */
 bool board_io_factory_reset_requested(void);
-
-const char *board_comm_mode_str(enum board_comm_mode mode);
 
 void board_led_set(enum board_led led, enum board_led_mode mode);
 

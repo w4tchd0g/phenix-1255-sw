@@ -54,6 +54,13 @@ void control_session_terminate(void);
 bool control_session_active(void);
 
 /**
+ * End the host session and stop the stream, PA and TX driver off. Used
+ * before saving settings that need a reboot: flash writes are refused
+ * while a stream runs. Must be called from a thread that may sleep.
+ */
+void control_shutdown(void);
+
+/**
  * Leave the RF path in a safe state, end the host session and reset the
  * SoC. With factory_reset, all stored settings are erased before the reset.
  * Must be called from a thread that may sleep; does not return.

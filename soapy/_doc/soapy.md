@@ -32,6 +32,15 @@ the most recent RX timestamp and the host time since its arrival; the device
 is not queried. Counter values and nanoseconds are converted with
 `SoapySDR::ticksToTimeNs` / `timeNsToTicks` at the current sample rate.
 
+## Gains
+
+`setGain()` sends `SET_GAIN` and stores the value from the response, which
+`getGain()` returns. If the device sets the gains of a direction manually
+([radio.md](../../firmware/src/radio/_doc/radio.md#gain-source)), the
+response carries the manual value and the request has no effect. A manual
+change on the device during a session is seen by the module only with its
+next `setGain()`.
+
 The control client sends `KEEPALIVE` every 250 ms and starts its sequence
 numbers at a random value, so that responses queued for a previous host
 cannot match new requests.

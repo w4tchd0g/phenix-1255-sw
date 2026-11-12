@@ -2,7 +2,8 @@
 
 `sx1255.c` configures the Semtech SX1255 over SPI (LPSPI1, 10 MHz, GPIO chip
 select): reset, register access, frequencies, sample rate, gains, modes and
-RF loopback. The I/Q samples run over I2S and are handled by the stream
+RF loopback. `gain_ctrl.c` decides per direction whether the host or the
+operator sets the gains ([Gain source](#gain-source)). The I/Q samples run over I2S and are handled by the stream
 module ([stream.md](../../stream/_doc/stream.md)). Register definitions are
 in `sx1255_regs.h`; pins in [hardware.md](../../../../_doc/hardware.md#pin-assignment).
 
@@ -53,6 +54,64 @@ Values are clamped and quantized; the value actually set is returned.
 | PGA | RX | 0..30 dB | 2 dB |
 | DAC | TX | 0..9 dB | 3 dB |
 | MIXER | TX | 0..30 dB | 2 dB |
+
+```
+RX: antenna -> LNA -> mixer (down) -> filter -> PGA -> ADC -> I/Q samples
+TX: I/Q samples -> DAC -> mixer (up) -> TX output -> external PA
+```
+
+- **LNA** (low noise amplifier) at the RF input. It sets the receiver
+  sensitivity, because the noise of all later stages counts less the more
+  it amplifies. Too much LNA gain lets strong nearby signals overload the
+  following stages.
+- **PGA** (programmable gain amplifier) in the analog baseband before the
+  ADC. It matches the signal level to the ADC range: enough to lift weak
+  signals above the quantization noise, little enough to avoid clipping. It
+  hardly changes the sensitivity.
+- **DAC** gain sets the analog level of the TX samples ahead of the up
+  mixer; 9 dB is the highest level.
+- **MIXER** is the gain of the up mixer and the main setting for the power
+  at the TX output of the SX1255; 30 dB is the highest level.
+
+As a rule, the LNA is set as high as strong signals allow and the PGA
+adjusts the level; if the RX signal clips, the PGA is lowered first. On TX,
+more gain helps only while the mixer and the external PA stay linear: TETRA
+uses π/4-DQPSK, whose amplitude varies, so an overdriven TX path distorts
+the signal and spills into the adjacent channels. The absolute output power
+depends on the board, the PA and the frequency.
+
+## Gain source
+
+The gains of each direction (RX: LNA and PGA, TX: DAC and MIXER) are set
+either by the host or manually on the device. The mode is selected per
+direction in the *RF gain* menu of the front panel
+([display.md](../../display/_doc/display.md#menu)) or with
+`phenix gain mode <rx|tx> <host|manual>` on the console
+([shell.md](../../shell/_doc/shell.md#phenix)). The factory default is host
+for both directions.
+
+| Mode | `SET_GAIN` from the host | Manual changes |
+|---|---|---|
+| Host | Applied; the response contains the value set | Refused |
+| Manual | Not applied; answered with status OK and the manual value as the value set | Applied at once, also while a stream runs |
+
+- Answering instead of rejecting keeps host software such as FlowStation
+  running, which stops on errors; `getGain()` in the SoapySDR module then
+  reports the gain actually in use. The first ignored request of a session
+  is logged per direction.
+- Switching a direction to manual takes over the gains in use, e.g. those
+  set by the host, as manual values. Switching back to host keeps the gains
+  until the host sets them again (the SoapySDR module sets all gains when
+  the device is opened).
+- Modes and manual values are stored as `phenix/gain`
+  ([config.md](../../config/_doc/config.md)) and applied at boot and after
+  `sx1255 reset`. They are saved 2 s after the last change, so that a held
+  button causes one flash write; while a stream runs, saving is deferred
+  until it stops, because flash writes lock interrupts
+  ([config.md](../../config/_doc/config.md#flash-writes-and-streaming)). A reboot from the
+  menu, the web interface or `control_reboot()` saves pending changes first.
+- `sx1255 gain` on the console writes the register directly, bypassing the
+  gain source; manual values are not changed by it.
 
 ## Modes and loopback
 

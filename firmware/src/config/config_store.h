@@ -25,17 +25,30 @@
 #define PHENIX_DEFAULT_SAMPLE_PORT PHX_DEFAULT_SAMPLE_PORT
 
 /* Front panel display */
-#define PHENIX_CONTRAST_MAX                10
-#define PHENIX_DIM_TIMEOUT_MAX_S           3600
-#define PHENIX_DEFAULT_DISPLAY_CONTRAST    8
-#define PHENIX_DEFAULT_DISPLAY_DIM_S       300
-#define PHENIX_DEFAULT_DISPLAY_AUTO_PAGES  true
+#define PHENIX_CONTRAST_MAX                     10
+#define PHENIX_DIM_TIMEOUT_MAX_S                3600
+#define PHENIX_DEFAULT_DISPLAY_CONTRAST         8
+#define PHENIX_DEFAULT_DISPLAY_DIM_S            300
+#define PHENIX_DEFAULT_DISPLAY_AUTO_PAGES       true
+
+/* Gain elements in the order LNA, PGA (RX), DAC, MIXER (TX) */
+#define PHENIX_GAIN_COUNT 4
+/* Manual gains before the first switch to manual, as in the FlowStation patch */
+#define PHENIX_DEFAULT_GAIN_DB {42, 16, 9, 30}
+
+/* Host link for the control channel and the sample stream */
+#define PHENIX_DEFAULT_HOST_LINK PHENIX_LINK_USB
 
 /* TCP port of the web interface, not configurable */
 #define PHENIX_HTTP_PORT 80
 
 /* Size of a dotted-quad string including the terminator */
 #define PHENIX_IPV4_STR_LEN 16
+
+enum phenix_host_link {
+	PHENIX_LINK_USB,
+	PHENIX_LINK_ETHERNET,
+};
 
 struct phenix_net_cfg {
 	bool dhcp;
@@ -59,6 +72,14 @@ struct phenix_display_cfg {
 	bool auto_pages;
 };
 
+struct phenix_gain_cfg {
+	/* Gains of the direction are set on the device, host requests are ignored */
+	bool rx_manual;
+	bool tx_manual;
+	/* Manual gains in dB, LNA, PGA, DAC, MIXER */
+	uint8_t db[PHENIX_GAIN_COUNT];
+};
+
 /**
  * Initialize the settings backend and load the stored configuration.
  *
@@ -69,6 +90,12 @@ int config_store_init(bool factory_reset);
 
 void config_store_defaults(struct phenix_net_cfg *cfg);
 
+/*
+ * The setters and config_store_erase() write the flash, which locks
+ * interrupts. They return -EBUSY while a stream runs and keep the stream
+ * from starting until the write is done.
+ */
+
 void config_store_get_net(struct phenix_net_cfg *cfg);
 
 /** Validate and persist a new network configuration. Applied at next boot. */
@@ -78,6 +105,23 @@ void config_store_get_display(struct phenix_display_cfg *cfg);
 
 /** Validate and persist the display settings. */
 int config_store_set_display(const struct phenix_display_cfg *cfg);
+
+void config_store_get_gain(struct phenix_gain_cfg *cfg);
+
+/** Persist the gain settings. */
+int config_store_set_gain(const struct phenix_gain_cfg *cfg);
+
+/** Host link loaded at boot; the transports are started for this link. */
+enum phenix_host_link config_store_boot_link(void);
+
+/** Stored host link; differs from the boot link until the next reboot. */
+enum phenix_host_link config_store_get_link(void);
+
+/** Persist the host link. Applied at next boot. */
+int config_store_set_link(enum phenix_host_link link);
+
+/** "HS USB" or "Ethernet" */
+const char *config_store_link_str(enum phenix_host_link link);
 
 /**
  * Erase the settings partition. The factory defaults apply after the next

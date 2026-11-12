@@ -15,8 +15,8 @@ python3 tools/phx_client.py --host phenix-1255.local timeout
 ```
 
 Global options: `--host` (default `phenix-1255.local`), `--ctrl-port`
-(1255), `--sample-port` (1256). The device must be in Ethernet mode
-(`COMM_SEL` closed to GND).
+(1255), `--sample-port` (1256). The host link of the device must be set to
+Ethernet ([config.md](../../firmware/src/config/_doc/config.md#host-link)).
 
 | Command | Checks | Pass condition |
 |---|---|---|

@@ -14,10 +14,12 @@
 #include <zephyr/shell/shell.h>
 
 #include "board/board_io.h"
+#include "board/hw_id.h"
 #include "board/watchdog.h"
 #include "config/config_store.h"
 #include "display/display_fb.h"
 #include "display/display_ui.h"
+#include "radio/gain_ctrl.h"
 #include "radio/sx1255.h"
 #include "radio/sx1255_regs.h"
 #include "stream/sample_io.h"
@@ -40,15 +42,41 @@ static void print_net_cfg(const struct shell *sh, const struct phenix_net_cfg *c
 	shell_print(sh, "sample_port: %u (UDP)", cfg->sample_port);
 }
 
+/*
+ * On unsupported hardware the start-up is halted: the SX1255 and the configuration
+ * store are not initialized, and the board must not be written to.
+ */
+static int check_hw(const struct shell *sh)
+{
+	if (!hw_id_is_supported()) {
+		shell_error(sh, "Unsupported hardware, start-up halted (see 'phenix status')");
+		return -ENODEV;
+	}
+
+	return 0;
+}
+
 static int cmd_status(const struct shell *sh, size_t argc, char **argv)
 {
+	char bits[HW_ID_BITS + 1];
+
 	ARG_UNUSED(argc);
 	ARG_UNUSED(argv);
 
-	int level = board_io_comm_sel_level();
+	hw_id_bits_str(bits, sizeof(bits));
+	shell_print(sh, "hardware:    %s (HW_ID2..0 = %s)", hw_id_name(), bits);
+	if (!hw_id_is_supported()) {
+		shell_print(sh, "start-up:    halted");
+		return 0;
+	}
 
-	shell_print(sh, "comm_sel:    %s (pin now: %s)", board_comm_mode_str(board_io_comm_mode()),
-		    (level < 0) ? "error" : (level ? "high" : "low"));
+	if (config_store_get_link() != config_store_boot_link()) {
+		shell_print(sh, "host link:   %s (%s after reboot)",
+			    config_store_link_str(config_store_boot_link()),
+			    config_store_link_str(config_store_get_link()));
+	} else {
+		shell_print(sh, "host link:   %s", config_store_link_str(config_store_boot_link()));
+	}
 	shell_print(sh, "pa:          %s", board_pa_is_enabled() ? "enabled" : "disabled");
 
 	return 0;
@@ -63,6 +91,43 @@ static int cmd_config_show(const struct shell *sh, size_t argc, char **argv)
 
 	config_store_get_net(&cfg);
 	print_net_cfg(sh, &cfg);
+	shell_print(sh, "link:        %s",
+		    (config_store_get_link() == PHENIX_LINK_USB) ? "usb" : "ethernet");
+
+	return 0;
+}
+
+static void print_save_error(const struct shell *sh, int err)
+{
+	if (err == -EBUSY) {
+		/* Flash writes lock interrupts, which disturbs the stream */
+		shell_error(sh, "Not saved: stream running, stop it or end the host session first");
+	} else {
+		shell_error(sh, "Saving failed (%d)", err);
+	}
+}
+
+static int set_link(const struct shell *sh, const char *val)
+{
+	enum phenix_host_link link;
+	int ret;
+
+	if (strcmp(val, "usb") == 0) {
+		link = PHENIX_LINK_USB;
+	} else if (strcmp(val, "ethernet") == 0) {
+		link = PHENIX_LINK_ETHERNET;
+	} else {
+		shell_error(sh, "Invalid value '%s' for link (usb|ethernet)", val);
+		return -EINVAL;
+	}
+
+	ret = config_store_set_link(link);
+	if (ret < 0) {
+		print_save_error(sh, ret);
+		return ret;
+	}
+
+	shell_print(sh, "Saved. Takes effect after reboot.");
 
 	return 0;
 }
@@ -89,6 +154,15 @@ static int cmd_config_set(const struct shell *sh, size_t argc, char **argv)
 	int ret = 0;
 
 	ARG_UNUSED(argc);
+
+	ret = check_hw(sh);
+	if (ret < 0) {
+		return ret;
+	}
+
+	if (strcmp(key, "link") == 0) {
+		return set_link(sh, val);
+	}
 
 	config_store_get_net(&cfg);
 
@@ -130,7 +204,7 @@ static int cmd_config_set(const struct shell *sh, size_t argc, char **argv)
 
 	ret = config_store_set_net(&cfg);
 	if (ret < 0) {
-		shell_error(sh, "Saving failed (%d)", ret);
+		print_save_error(sh, ret);
 		return ret;
 	}
 
@@ -141,7 +215,7 @@ static int cmd_config_set(const struct shell *sh, size_t argc, char **argv)
 
 static int cmd_led(const struct shell *sh, size_t argc, char **argv)
 {
-	static const char *const names[BOARD_LED_COUNT] = {"err", "warn", "ok"};
+	static const char *const names[BOARD_LED_COUNT] = {"err", "info", "ok"};
 	static const char *const modes[] = {"off", "on", "slow", "fast"};
 	int led = -1;
 	int mode = -1;
@@ -160,7 +234,7 @@ static int cmd_led(const struct shell *sh, size_t argc, char **argv)
 	}
 
 	if (led < 0 || mode < 0) {
-		shell_error(sh, "Usage: phenix led <err|warn|ok> <off|on|slow|fast>");
+		shell_error(sh, "Usage: phenix led <err|info|ok> <off|on|slow|fast>");
 		return -EINVAL;
 	}
 
@@ -170,9 +244,9 @@ static int cmd_led(const struct shell *sh, size_t argc, char **argv)
 }
 
 SHELL_STATIC_SUBCMD_SET_CREATE(sub_config,
-	SHELL_CMD(show, NULL, "Show stored network configuration", cmd_config_show),
+	SHELL_CMD(show, NULL, "Show stored configuration", cmd_config_show),
 	SHELL_CMD_ARG(set, NULL,
-		      "Set and save a value: <dhcp|ip|netmask|gateway|dns|ctrl_port|"
+		      "Set and save a value: <link|dhcp|ip|netmask|gateway|dns|ctrl_port|"
 		      "sample_port> <value>",
 		      cmd_config_set, 3, 0),
 	SHELL_SUBCMD_SET_END);
@@ -187,6 +261,104 @@ static int cmd_wdt_test(const struct shell *sh, size_t argc, char **argv)
 
 	return 0;
 }
+
+static int cmd_gain_status(const struct shell *sh, size_t argc, char **argv)
+{
+	ARG_UNUSED(argc);
+	ARG_UNUSED(argv);
+
+	shell_print(sh, "rx:          %s, LNA %d dB, PGA %d dB",
+		    gain_ctrl_is_manual(SX1255_RX) ? "manual" : "host",
+		    sx1255_get_gain(SX1255_GAIN_LNA), sx1255_get_gain(SX1255_GAIN_PGA));
+	shell_print(sh, "tx:          %s, DAC %d dB, MIXER %d dB",
+		    gain_ctrl_is_manual(SX1255_TX) ? "manual" : "host",
+		    sx1255_get_gain(SX1255_GAIN_DAC), sx1255_get_gain(SX1255_GAIN_MIXER));
+
+	return 0;
+}
+
+static int cmd_gain_mode(const struct shell *sh, size_t argc, char **argv)
+{
+	enum sx1255_dir dir;
+	bool manual;
+	int ret;
+
+	ARG_UNUSED(argc);
+
+	ret = check_hw(sh);
+	if (ret < 0) {
+		return ret;
+	}
+
+	if (strcmp(argv[1], "rx") == 0) {
+		dir = SX1255_RX;
+	} else if (strcmp(argv[1], "tx") == 0) {
+		dir = SX1255_TX;
+	} else {
+		shell_error(sh, "Usage: phenix gain mode <rx|tx> <host|manual>");
+		return -EINVAL;
+	}
+
+	if (strcmp(argv[2], "host") == 0) {
+		manual = false;
+	} else if (strcmp(argv[2], "manual") == 0) {
+		manual = true;
+	} else {
+		shell_error(sh, "Usage: phenix gain mode <rx|tx> <host|manual>");
+		return -EINVAL;
+	}
+
+	return gain_ctrl_set_manual(dir, manual);
+}
+
+static int cmd_gain_set(const struct shell *sh, size_t argc, char **argv)
+{
+	char *end;
+	long db;
+	int actual;
+	int ret;
+
+	ARG_UNUSED(argc);
+
+	ret = check_hw(sh);
+	if (ret < 0) {
+		return ret;
+	}
+
+	db = strtol(argv[2], &end, 10);
+	if (*argv[2] == '\0' || *end != '\0') {
+		shell_error(sh, "Invalid gain '%s'", argv[2]);
+		return -EINVAL;
+	}
+
+	for (int g = 0; g < SX1255_GAIN_COUNT; g++) {
+		if (strcasecmp(argv[1], sx1255_gain_name(g)) != 0) {
+			continue;
+		}
+		ret = gain_ctrl_set(g, (int)db, &actual);
+		if (ret == -EPERM) {
+			bool rx = (gain_ctrl_dir(g) == SX1255_RX);
+
+			shell_error(sh, "%s gain is set by the host; use 'phenix gain mode %s manual'",
+				    rx ? "RX" : "TX", rx ? "rx" : "tx");
+		} else if (ret < 0) {
+			shell_error(sh, "Failed (%d)", ret);
+		} else {
+			shell_print(sh, "%s gain set to %d dB", sx1255_gain_name(g), actual);
+		}
+		return ret;
+	}
+
+	shell_error(sh, "Usage: phenix gain set <lna|pga|dac|mixer> <dB>");
+	return -EINVAL;
+}
+
+SHELL_STATIC_SUBCMD_SET_CREATE(sub_gain,
+	SHELL_CMD(status, NULL, "Show gain source and gains", cmd_gain_status),
+	SHELL_CMD_ARG(mode, NULL, "Gain source: <rx|tx> <host|manual>", cmd_gain_mode, 3, 0),
+	SHELL_CMD_ARG(set, NULL, "Set a manual gain: <lna|pga|dac|mixer> <dB>", cmd_gain_set, 3,
+		      0),
+	SHELL_SUBCMD_SET_END);
 
 static int cmd_display_status(const struct shell *sh, size_t argc, char **argv)
 {
@@ -212,9 +384,9 @@ static int cmd_display_status(const struct shell *sh, size_t argc, char **argv)
 static int cmd_display_key(const struct shell *sh, size_t argc, char **argv)
 {
 	static const char *const keys[] = {
-		[DISPLAY_KEY_PREV] = "prev",
-		[DISPLAY_KEY_NEXT] = "next",
-		[DISPLAY_KEY_SELECT] = "select",
+		[DISPLAY_KEY_LEFT] = "left",
+		[DISPLAY_KEY_RIGHT] = "right",
+		[DISPLAY_KEY_OK] = "ok",
 		[DISPLAY_KEY_BACK] = "back",
 	};
 
@@ -227,7 +399,7 @@ static int cmd_display_key(const struct shell *sh, size_t argc, char **argv)
 		}
 	}
 
-	shell_error(sh, "Usage: phenix display key <prev|next|select|back>");
+	shell_error(sh, "Usage: phenix display key <left|right|ok|back>");
 
 	return -EINVAL;
 }
@@ -275,7 +447,7 @@ static int cmd_display_dump(const struct shell *sh, size_t argc, char **argv)
 
 SHELL_STATIC_SUBCMD_SET_CREATE(sub_display,
 	SHELL_CMD(status, NULL, "Show display state and settings", cmd_display_status),
-	SHELL_CMD_ARG(key, NULL, "Simulate an input: <prev|next|select|back>", cmd_display_key,
+	SHELL_CMD_ARG(key, NULL, "Simulate an input: <left|right|ok|back>", cmd_display_key,
 		      2, 0),
 	SHELL_CMD_ARG(test, NULL, "Show the colour zone test pattern: [seconds]",
 		      cmd_display_test, 1, 1),
@@ -287,7 +459,8 @@ SHELL_STATIC_SUBCMD_SET_CREATE(sub_phenix,
 	SHELL_CMD(status, NULL, "Show device status", cmd_status),
 	SHELL_CMD(config, &sub_config, "Persistent configuration", NULL),
 	SHELL_CMD(display, &sub_display, "Front panel display", cmd_display_status),
-	SHELL_CMD_ARG(led, NULL, "Set LED mode: <err|warn|ok> <off|on|slow|fast>", cmd_led, 3,
+	SHELL_CMD(gain, &sub_gain, "RX/TX gain source and manual gains", cmd_gain_status),
+	SHELL_CMD_ARG(led, NULL, "Set LED mode: <err|info|ok> <off|on|slow|fast>", cmd_led, 3,
 		      0),
 	SHELL_SUBCMD_SET_END);
 
@@ -310,6 +483,12 @@ static int parse_u32(const char *str, uint32_t *out)
 
 static int check_ready(const struct shell *sh)
 {
+	int ret = check_hw(sh);
+
+	if (ret < 0) {
+		return ret;
+	}
+
 	if (!sx1255_is_ready()) {
 		shell_error(sh, "SX1255 not initialized (use 'sx1255 reset')");
 		return -ENODEV;
@@ -366,12 +545,19 @@ static int cmd_sx_reset(const struct shell *sh, size_t argc, char **argv)
 	ARG_UNUSED(argc);
 	ARG_UNUSED(argv);
 
+	ret = check_hw(sh);
+	if (ret < 0) {
+		return ret;
+	}
+
 	ret = sx1255_init();
 	if (ret < 0) {
 		shell_error(sh, "Init failed (%d)", ret);
+		return ret;
 	}
+	gain_ctrl_apply();
 
-	return ret;
+	return 0;
 }
 
 static int cmd_sx_dump(const struct shell *sh, size_t argc, char **argv)
@@ -381,6 +567,11 @@ static int cmd_sx_dump(const struct shell *sh, size_t argc, char **argv)
 
 	ARG_UNUSED(argc);
 	ARG_UNUSED(argv);
+
+	ret = check_hw(sh);
+	if (ret < 0) {
+		return ret;
+	}
 
 	ret = sx1255_read_regs(0, buf, sizeof(buf));
 	if (ret < 0) {
@@ -398,6 +589,11 @@ static int cmd_sx_reg_read(const struct shell *sh, size_t argc, char **argv)
 	uint32_t addr;
 	uint32_t len = 1;
 	int ret;
+
+	ret = check_hw(sh);
+	if (ret < 0) {
+		return ret;
+	}
 
 	if (parse_u32(argv[1], &addr) < 0 || addr > SX1255_ADDR_MASK ||
 	    (argc > 2 && (parse_u32(argv[2], &len) < 0 || len == 0U || len > sizeof(buf)))) {
@@ -425,6 +621,11 @@ static int cmd_sx_reg_write(const struct shell *sh, size_t argc, char **argv)
 	int ret;
 
 	ARG_UNUSED(argc);
+
+	ret = check_hw(sh);
+	if (ret < 0) {
+		return ret;
+	}
 
 	if (parse_u32(argv[1], &addr) < 0 || addr > SX1255_ADDR_MASK ||
 	    parse_u32(argv[2], &val) < 0 || val > 0xFFU) {

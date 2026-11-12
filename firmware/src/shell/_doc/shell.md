@@ -13,17 +13,25 @@ the relocation script would otherwise pick Zephyr's own `shell_cmds.c`
 
 | Command | Purpose |
 |---|---|
-| `phenix status` | Host link selected by `COMM_SEL` at boot and the current pin level, PA state |
-| `phenix led <err\|warn\|ok> <off\|on\|slow\|fast>` | Set an LED ([board.md](../../board/_doc/board.md#status-leds)) |
+| `phenix status` | Hardware variant and HW_ID jumpers, host link in use (and the stored one if it differs until the next reboot), PA state |
+| `phenix led <err\|info\|ok> <off\|on\|slow\|fast>` | Set an LED ([board.md](../../board/_doc/board.md#status-leds)) |
 | `phenix wdt_test` | Stop feeding the watchdog, provokes a reset ([board.md](../../board/_doc/board.md#watchdog)) |
-| `phenix config show` | Stored network configuration |
-| `phenix config set <key> <value>` | Validate and save a network value: `dhcp`, `ip`, `netmask`, `gateway`, `dns`, `ctrl_port`, `sample_port` ([ethernet.md](../../ethernet/_doc/ethernet.md#configuration-on-the-console)) |
+| `phenix config show` | Stored network configuration and host link |
+| `phenix config set <key> <value>` | Validate and save a value: `link` (`usb`/`ethernet`, [config.md](../../config/_doc/config.md#host-link)), `dhcp`, `ip`, `netmask`, `gateway`, `dns`, `ctrl_port`, `sample_port` ([ethernet.md](../../ethernet/_doc/ethernet.md#configuration-on-the-console)); refused while a stream runs ([config.md](../../config/_doc/config.md#flash-writes-and-streaming)) |
+| `phenix gain` | Gain source and gains of RX and TX |
+| `phenix gain mode <rx\|tx> <host\|manual>` | Select the gain source of a direction ([radio.md](../../radio/_doc/radio.md#gain-source)) |
+| `phenix gain set <lna\|pga\|dac\|mixer> <dB>` | Set a manual gain; refused while the direction is in host mode |
 | `phenix display` | Display state and settings |
-| `phenix display key <prev\|next\|select\|back>` | Simulate a front panel input |
+| `phenix display key <left\|right\|ok\|back>` | Simulate a front panel button (`ok` short, `back` long press of OK) |
 | `phenix display test [s]` | Colour zone test pattern (default 10 s) |
 | `phenix display dump` | Print the content last sent to the display ([display.md](../../display/_doc/display.md)) |
 
-Network settings take effect after `kernel reboot cold`.
+Network and host link settings take effect after `kernel reboot cold`.
+
+On unsupported hardware the start-up is halted
+([board.md](../../board/_doc/board.md#hardware-variant)). `phenix status`
+then shows only the hardware line; `phenix config set` and all `sx1255`
+commands are refused.
 
 ## sx1255
 
@@ -46,7 +54,7 @@ Network settings take effect after `kernel reboot cold`.
 | Command | Purpose |
 |---|---|
 | `stream start` / `stream stop` | Start/stop the I2S interface and the sample counter (the PA is not switched) |
-| `stream status` | Counter, FIFO and frame sync errors, late TX refills, packet counters |
+| `stream status` | Counter, FIFO and frame sync errors, missed TX refill blocks (`tx_refill_late`), packet counters |
 | `stream regs` | SAI registers |
 | `stream rate [ms]` | Counter rate against the CPU clock |
 | `stream check [ms]` | Counter monotonicity under continuous reads |

@@ -86,10 +86,10 @@ static void fill_rx_header(struct phx_sample_hdr *hdr, uint64_t timestamp)
 	hdr->tx_early = sys_cpu_to_le32(st.tx_early);
 	hdr->timestamp = (int64_t)sys_cpu_to_le64(timestamp);
 
-	/* Short WARN flash on new late TX packets */
+	/* Short INFO flash on new late TX packets */
 	if (st.tx_late != prev_tx_late) {
 		prev_tx_late = st.tx_late;
-		board_led_flash(BOARD_LED_WARN);
+		board_led_flash(BOARD_LED_INFO);
 	}
 }
 
@@ -98,7 +98,7 @@ static void skip_to(uint64_t index)
 	atomic_add(&rx_dropped, (atomic_val_t)(index - rx_next));
 	rx_next = index;
 	rx_discontinuity = true;
-	board_led_flash(BOARD_LED_WARN);
+	board_led_flash(BOARD_LED_INFO);
 }
 
 static void rx_pump(void *p1, void *p2, void *p3)
@@ -232,6 +232,6 @@ void sample_io_handle_tx_packet(const uint8_t *buf, size_t len)
 	ret = stream_tx_write((int64_t)sys_le64_to_cpu((uint64_t)hdr->timestamp),
 			      (const struct phx_cs16 *)(buf + sizeof(*hdr)), count);
 	if (ret == -ETIME || ret == -EFBIG) {
-		board_led_flash(BOARD_LED_WARN);
+		board_led_flash(BOARD_LED_INFO);
 	}
 }

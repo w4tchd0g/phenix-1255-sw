@@ -1,11 +1,12 @@
 # HS USB
 
 `transport_usb.c` implements the USB vendor function with four bulk
-endpoints on the device stack `device_next`. When the `COMM_SEL` switch is
-open (see [board.md](../../board/_doc/board.md#comm_sel-switch)), the host
-link runs over the high-speed USB port of the FRDM-MCXN947 (USB1, EHCI
-controller with integrated HS PHY). Ethernet and the web interface stay
-active in this mode, but host sessions are only accepted over USB.
+endpoints on the device stack `device_next`. When the host link is set to
+USB (the factory default, see
+[config.md](../../config/_doc/config.md#host-link)), the host link runs
+over the high-speed USB port of the FRDM-MCXN947 (USB1, EHCI controller with
+integrated HS PHY). Ethernet and the web interface stay active in this mode,
+but host sessions are only accepted over USB.
 
 ## USB identification
 

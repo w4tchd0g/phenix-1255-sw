@@ -22,14 +22,14 @@ firmware/
 
 | Module | Files | Purpose | Documentation |
 |---|---|---|---|
-| `board/` | `board_io.c`, `watchdog.c` | Status LEDs, PA enable, `COMM_SEL`, factory reset button, hardware watchdog | [board.md](../src/board/_doc/board.md) |
-| `config/` | `config_store.c` | Persistent network and display settings (NVS) | [config.md](../src/config/_doc/config.md) |
-| `radio/` | `sx1255.c`, `sx1255_regs.h` | SX1255 over SPI: frequencies, gains, sample rate, modes | [radio.md](../src/radio/_doc/radio.md) |
+| `board/` | `board_io.c`, `hw_id.c`, `watchdog.c` | Hardware variant (HW_ID jumpers), status LEDs, PA enable, factory reset button, hardware watchdog | [board.md](../src/board/_doc/board.md) |
+| `config/` | `config_store.c` | Persistent network, host link and display settings (NVS) | [config.md](../src/config/_doc/config.md) |
+| `radio/` | `sx1255.c`, `sx1255_regs.h`, `gain_ctrl.c` | SX1255 over SPI: frequencies, gains, sample rate, modes; gain source host or manual | [radio.md](../src/radio/_doc/radio.md) |
 | `stream/` | `stream.c`, `sample_io.c` | SAI1 and eDMA, sample counter, RX pump, TX ingest | [stream.md](../src/stream/_doc/stream.md) |
 | `control/` | `control.c` | Host session and control commands, independent of the transport | [control.md](../src/control/_doc/control.md) |
 | `ethernet/` | `transport_eth.c`, `net_config.c`, `web_ui.c` | TCP/UDP transport, addressing, mDNS, web interface | [ethernet.md](../src/ethernet/_doc/ethernet.md) |
 | `usb/` | `transport_usb.c` | HS USB vendor function with bulk endpoints | [usb.md](../src/usb/_doc/usb.md) |
-| `display/` | `display_ui.c`, `display_fb.c` | Front panel: OLED status pages, menu, encoder | [display.md](../src/display/_doc/display.md) |
+| `display/` | `display_ui.c`, `display_fb.c`, `splash_logo.c` | Front panel: OLED start screen, status pages, menu, buttons | [display.md](../src/display/_doc/display.md) |
 | `shell/` | `shell_commands.c` | Console commands for diagnostics | [shell.md](../src/shell/_doc/shell.md) |
 
 Headers are included with their module folder (`#include "stream/stream.h"`);
@@ -41,24 +41,29 @@ protocol shared with the host is in
 
 1. `EARLY` init level: PA_EN is driven inactive before clock setup and before
    any driver ([board.md](../src/board/_doc/board.md#pa-enable)).
-2. `main()`: board I/O, watchdog (red LED blinks slowly after a watchdog
-   reset), factory reset check (SW2), settings, SX1255 (433.92 MHz, 600 kHz),
-   stream, control and RX pump.
-3. Ethernet is always configured and the web interface and the front panel
-   are started, independent of `COMM_SEL`.
-4. Depending on `COMM_SEL`, the Ethernet or the USB transport is started.
+2. `main()`: hardware variant from the HW_ID jumpers. On unsupported
+   hardware the start-up stops here; only the console runs, the front panel
+   shows an error screen and the red LED of the FRDM-MCXN947 blinks
+   ([board.md](../src/board/_doc/board.md#hardware-variant)).
+3. Board I/O, watchdog (LED2 blinks slowly after a watchdog reset), factory reset check (SW2), settings, SX1255 (433.92 MHz, 600 kHz,
+   manual gains if selected), stream, control and RX pump.
+4. Ethernet is always configured and the web interface and the front panel
+   are started, independent of the host link.
+5. Depending on the stored host link (default HS USB,
+   [config.md](../src/config/_doc/config.md#host-link)), the Ethernet or the
+   USB transport is started.
    The green LED then blinks slowly (ready, no host).
 
-An initialization error lights the red LED; the firmware keeps running so
-that the console and the web interface stay available.
+An initialization error in steps 3 to 5 lights LED2 (red); the firmware
+keeps running so that the console and the web interface stay available.
 
 ## Threads and interrupts
 
 | Context | Priority | Work |
 |---|---|---|
-| eDMA RX/TX interrupts | DT priority | Count ring halves, refill the TX ring from the TX buffer |
+| eDMA RX/TX interrupts | DT priority | Count ring halves, refill the TX ring from the TX buffer (block index from the RX counter) |
 | SAI interrupt | 2 | FIFO errors (stream fault, PA off), frame sync error counters |
-| LPI2C3, GPIO port 0/1 interrupts | 3 | Display bus, encoder and button edges |
+| LPI2C3, GPIO port 0/1/2/4 interrupts | 3 | Display bus and button edges |
 | USB device stack thread | cooperative 8 | USB events, TX packet ingest on USB |
 | ENET-QOS RX work queue | cooperative 1 | Ethernet frame reception (descriptor handling) |
 | UDP sample thread | preemptive 3 | TX packet ingest on Ethernet |
@@ -83,8 +88,10 @@ over Ethernet.
 PA_EN is driven off as early as possible during boot and is switched on only
 by `STREAM_TX`. It is switched off immediately on `STREAM_TX` off, stream
 stop, SAI FIFO errors, session end (TCP close, USB reset, deconfiguration,
-suspend or VBUS loss, link timeout of 1 s) and before a reboot from the web
-interface or the front panel menu (`control_reboot()`). The watchdog resets
+suspend or VBUS loss, link timeout of 1 s) and before the web interface or
+the front panel menu save settings or reboot (`control_shutdown()`,
+`control_reboot()`). Switching TX on and stopping the stream share a lock,
+so a stream fault during `STREAM_TX` cannot leave the PA on. The watchdog resets
 the MCU if the system hangs; the reset ends any transmission and the early
 boot code drives PA_EN off again. While the MCU is in reset, PA_EN is high
 impedance and the pull-up on the PA gate of phenix-1255-hw keeps the PA off
