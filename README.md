@@ -69,6 +69,15 @@ timing-critical driver, not the base station software.
 > to v4.5.0-rc3 until v4.5.0 is released. Open points:
 > [roadmap.md](_doc/roadmap.md).
 
+> [!IMPORTANT]
+> **USB ID:** the firmware uses the pid.codes test PID `1209:000A`. Test PIDs
+> may be used for private testing and development only: they are not unique
+> and must not be used in devices that are sold, given away or distributed as
+> finished products. Phenix-1255 boards built for your own use are fine; do not
+> pass on boards or firmware images with this ID. A dedicated PID has been
+> requested from pid.codes (see [roadmap.md](_doc/roadmap.md)). Details:
+> [usb.md](firmware/src/usb/_doc/usb.md#about-the-test-pid-1209000a).
+
 ### At a glance
 
 | | |
