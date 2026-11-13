@@ -92,12 +92,11 @@ timing-critical driver, not the base station software.
 ### How it works
 
 ```mermaid
-flowchart LR
-    SX["SX1255<br/>38.4 MHz TCXO"] -->|I2S RX samples| FW["FRDM-MCXN947<br/>Zephyr firmware"]
-    FW -->|I2S TX samples, SPI config| SX
-    FW -->|PA_EN| PA["PA supply"]
-    FW <-->|HS USB or Ethernet| SOAPY["SoapySDR module<br/>driver=phenix-1255"]
+flowchart TB
+    SX["SX1255<br/>38.4 MHz TCXO"] <--> I2S(["I2S samples<br/>SPI config"]) <--> FW["FRDM-MCXN947<br/>Zephyr firmware"]
+    FW <--> LINK(["HS USB or<br/>Ethernet"]) <--> SOAPY["SoapySDR module<br/>driver=phenix-1255"]
     SOAPY <--> BS["TETRA-Bluestation<br/>FlowStation"]
+    FW --> PAEN(["PA_EN"]) --> PA["PA supply"]
 ```
 
 The SX1255 is the I2S clock source. The firmware counts every I2S frame and
