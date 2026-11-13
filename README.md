@@ -136,6 +136,10 @@ an exact sample. Details: [architecture.md](_doc/architecture.md).
   counters) and a menu operated with three buttons (Left, OK, Right) for
   RF gain, display, network, host link, reboot and factory reset settings.
 
+<p align="center">
+  <img src="_doc/images/front_panel.gif" alt="Front panel: start screen, status pages and menu while a stream runs" width="544">
+</p>
+
 **Host software**
 - SoapySDR module for Linux and macOS: timestamps on every read, exact timed
   writes, `getHardwareTime()`.
@@ -384,7 +388,7 @@ transmitting tests. All commands: [shell.md](firmware/src/shell/_doc/shell.md).
 | `firmware/` | Zephyr application for the FRDM-MCXN947, one folder per module in `firmware/src/` |
 | `common/` | Wire protocol definitions shared by firmware and host |
 | `soapy/` | SoapySDR module, test programs in `soapy/tests/`, udev rule in `soapy/udev/` |
-| `tools/` | Protocol test client, logo converter for the front panel start screen |
+| `tools/` | Protocol test client, logo converter for the front panel start screen, front panel GIF recorder |
 | `patches/` | Patches for TETRA-Bluestation and FlowStation |
 | `_doc/`, `*/_doc/` | Documentation, next to the code it describes |
 | `west.yml` | West manifest pinning the Zephyr revision |
@@ -400,7 +404,7 @@ code.
 | Firmware | [Structure, threads, memory, PA safety](firmware/_doc/firmware.md) |
 | Firmware modules | [Board I/O](firmware/src/board/_doc/board.md) · [Configuration](firmware/src/config/_doc/config.md) · [SX1255](firmware/src/radio/_doc/radio.md) · [Sample stream and timing](firmware/src/stream/_doc/stream.md) · [Control](firmware/src/control/_doc/control.md) · [Ethernet](firmware/src/ethernet/_doc/ethernet.md) · [HS USB and test PID](firmware/src/usb/_doc/usb.md) · [Front panel](firmware/src/display/_doc/display.md) · [Console commands](firmware/src/shell/_doc/shell.md) |
 | Protocol | [Wire protocol](common/_doc/protocol.md) |
-| Host | [SoapySDR module](soapy/_doc/soapy.md) · [Test programs](soapy/tests/_doc/tests.md) · [Protocol test client](tools/_doc/phx_client.md) · [Logo converter](tools/_doc/logo_to_c.md) |
+| Host | [SoapySDR module](soapy/_doc/soapy.md) · [Test programs](soapy/tests/_doc/tests.md) · [Protocol test client](tools/_doc/phx_client.md) · [Logo converter](tools/_doc/logo_to_c.md) · [Front panel GIF](tools/_doc/display_gif.md) |
 | Stations | [Patches for TETRA-Bluestation and FlowStation](patches/_doc/patches.md) |
 
 ## Acknowledgements

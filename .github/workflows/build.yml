@@ -142,4 +142,4 @@ jobs:
           grep -q "Available factories.*phenix-1255" soapy-info.txt
 
       - name: Check the Python tools
-        run: python3 -m py_compile tools/phx_client.py tools/logo_to_c.py
+        run: python3 -m py_compile tools/phx_client.py tools/logo_to_c.py tools/display_gif.py

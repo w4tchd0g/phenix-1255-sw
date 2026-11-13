@@ -24,6 +24,7 @@ web interface or console and applied at boot); a SoapySDR module
 | `soapy/` | SoapySDR module, test programs in `soapy/tests/` (C++17, libusb optional) |
 | `tools/phx_client.py` | Protocol test client, Ethernet only (Python stdlib only) |
 | `tools/logo_to_c.py` | Generates `firmware/src/display/splash_logo.c` from the logo PNG (needs Pillow, not needed for the build) |
+| `tools/display_gif.py` | Records the front panel over the console and renders `_doc/images/front_panel.gif` (needs pyserial and Pillow) |
 | `patches/` | Patches for TETRA-Bluestation and FlowStation (`git apply` format) |
 | `_doc/` | System documents: architecture, hardware, building, testing, roadmap |
 

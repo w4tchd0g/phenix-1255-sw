@@ -38,6 +38,11 @@ overlay so that the pin stays a GPIO.
 
 ## Screen layout
 
+![Front panel: start screen, status pages and menu while a stream runs](../../../../_doc/images/front_panel.gif)
+
+The animation is recorded from the device with
+[display_gif.py](../../../../tools/_doc/display_gif.md).
+
 ```
  +--------------------------+
  | PHENIX-1255        [ETH] |  yellow: host link, highlighted while a host session is open
