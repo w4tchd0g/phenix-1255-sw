@@ -92,12 +92,11 @@ timing-critical driver, not the base station software.
 ### How it works
 
 ```mermaid
-flowchart LR
-    SX["SX1255<br/>38.4 MHz TCXO"] -->|I2S RX samples| FW["FRDM-MCXN947<br/>Zephyr firmware"]
-    FW -->|I2S TX samples, SPI config| SX
-    FW -->|PA_EN| PA["PA supply"]
-    FW <-->|HS USB or Ethernet| SOAPY["SoapySDR module<br/>driver=phenix-1255"]
+flowchart TB
+    SX["SX1255<br/>38.4 MHz TCXO"] <--> I2S(["I2S samples<br/>SPI config"]) <--> FW["FRDM-MCXN947<br/>Zephyr firmware"]
+    FW <--> LINK(["HS USB or<br/>Ethernet"]) <--> SOAPY["SoapySDR module<br/>driver=phenix-1255"]
     SOAPY <--> BS["TETRA-Bluestation<br/>FlowStation"]
+    FW --> PAEN(["PA_EN"]) --> PA["PA supply"]
 ```
 
 The SX1255 is the I2S clock source. The firmware counts every I2S frame and
@@ -135,6 +134,10 @@ an exact sample. Details: [architecture.md](_doc/architecture.md).
 - 0.96" SSD1306 OLED with status pages (frequencies, link, network, gains,
   counters) and a menu operated with three buttons (Left, OK, Right) for
   RF gain, display, network, host link, reboot and factory reset settings.
+
+<p align="center">
+  <img src="_doc/images/front_panel.gif" alt="Front panel: start screen, status pages and menu while a stream runs" width="544">
+</p>
 
 **Host software**
 - SoapySDR module for Linux and macOS: timestamps on every read, exact timed
@@ -384,7 +387,7 @@ transmitting tests. All commands: [shell.md](firmware/src/shell/_doc/shell.md).
 | `firmware/` | Zephyr application for the FRDM-MCXN947, one folder per module in `firmware/src/` |
 | `common/` | Wire protocol definitions shared by firmware and host |
 | `soapy/` | SoapySDR module, test programs in `soapy/tests/`, udev rule in `soapy/udev/` |
-| `tools/` | Protocol test client, logo converter for the front panel start screen |
+| `tools/` | Protocol test client, logo converter for the front panel start screen, front panel GIF recorder |
 | `patches/` | Patches for TETRA-Bluestation and FlowStation |
 | `_doc/`, `*/_doc/` | Documentation, next to the code it describes |
 | `west.yml` | West manifest pinning the Zephyr revision |
@@ -400,7 +403,7 @@ code.
 | Firmware | [Structure, threads, memory, PA safety](firmware/_doc/firmware.md) |
 | Firmware modules | [Board I/O](firmware/src/board/_doc/board.md) · [Configuration](firmware/src/config/_doc/config.md) · [SX1255](firmware/src/radio/_doc/radio.md) · [Sample stream and timing](firmware/src/stream/_doc/stream.md) · [Control](firmware/src/control/_doc/control.md) · [Ethernet](firmware/src/ethernet/_doc/ethernet.md) · [HS USB and test PID](firmware/src/usb/_doc/usb.md) · [Front panel](firmware/src/display/_doc/display.md) · [Console commands](firmware/src/shell/_doc/shell.md) |
 | Protocol | [Wire protocol](common/_doc/protocol.md) |
-| Host | [SoapySDR module](soapy/_doc/soapy.md) · [Test programs](soapy/tests/_doc/tests.md) · [Protocol test client](tools/_doc/phx_client.md) · [Logo converter](tools/_doc/logo_to_c.md) |
+| Host | [SoapySDR module](soapy/_doc/soapy.md) · [Test programs](soapy/tests/_doc/tests.md) · [Protocol test client](tools/_doc/phx_client.md) · [Logo converter](tools/_doc/logo_to_c.md) · [Front panel GIF](tools/_doc/display_gif.md) |
 | Stations | [Patches for TETRA-Bluestation and FlowStation](patches/_doc/patches.md) |
 
 ## Acknowledgements
