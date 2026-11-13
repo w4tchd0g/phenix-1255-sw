@@ -24,8 +24,10 @@ they belong to.
 
 ## Before boards are given to others
 
-- **USB product ID** – apply for a dedicated PID. The test PID 1209:000A
-  must not be used in distributed devices
+- **USB product ID** – PID 1209:2255 is requested from pid.codes
+  ([pull request](https://github.com/pidcodes/pidcodes.github.com/pull/1334)).
+  After it is merged, change `PHX_USB_PID` in `protocol.h`, the udev rule and
+  the docs. The test PID 1209:000A must not be used in distributed devices
   ([usb.md](../firmware/src/usb/_doc/usb.md#about-the-test-pid-1209000a)).
 
 ## Improvements
